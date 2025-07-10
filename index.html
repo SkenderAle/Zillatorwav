@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Analizzatore Audio</title>
+  <subtitle> <a href="mailto:alessandro.zilli@gmail.com">Invia email all'autore Zilli Alessandro - Udine</a></subtitle>
+  <style>
+    body {
+      background-color: #111;
+      color: #eee;
+      font-family: monospace;
+      margin: 0;
+      padding: 0;
+    }
+
+    .split-container {
+      display: flex;
+      height: 100vh;
+    }
+
+    .left-pane {
+      width: 70%;
+      padding: 20px;
+      box-sizing: border-box;
+      border-right: 1px solid #333;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .right-pane {
+      width: 30%;
+      padding: 10px;
+      box-sizing: border-box;
+      overflow-y: hidden;
+      background-color: #1a1a1a;
+      color: #ccc;
+    }
+
+    h1, #status {
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .controls-container {
+      order: 1;
+      margin-bottom: 20px;
+    }
+
+    .control-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .visualizers-container {
+      order: 2;
+      flex-grow: 1;
+    }
+
+    button, input[type="file"] {
+      background-color: #222;
+      border: 1px solid #0f0;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 14px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+
+    select {
+      background-color: #222;
+      border: 1px solid #0f0;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 14px;
+      padding: 6px 12px;
+      max-width: 300px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      max-width: 600px;
+      margin: 10px auto;
+      display: block;
+    }
+
+    #mainVisualizer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .visualRow {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 5px;
+      width: 665px;
+    }
+
+    #waveformYAxis, #spectrogramYAxis {
+      background-color: #111;
+      border: 1px solid #555;
+      width: 65px;
+      height: 200px;
+      user-select: none;
+      font-size: 12px;
+      color: #0f0;
+    }
+
+    #oscilloscope, #spectrogram {
+      background-color: #000;
+      border: 1px solid #555;
+      width: 600px;
+      height: 200px;
+      display: block;
+    }
+
+    .harmonics-container {
+      margin-top: 10px;
+      height: calc(100% - 120px);
+      overflow-y: hidden;
+    }
+    
+    .harmonic-item {
+      margin-bottom: 8px;
+      padding: 5px;
+      background-color: #222;
+      border: 1px solid #333;
+    }
+    
+    .harmonic-label {
+      margin-bottom: 3px;
+      color: #0f0;
+      font-size: 12px;
+    }
+    
+    .harmonic-canvas {
+      background-color: #000;
+      width: 100%;
+      height: 30px;
+      display: block;
+    }
+
+    .playlist-info {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #0f0;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="split-container">
+    <div class="left-pane">
+      <h1>Analizzatore Audio - Forma d'onda e Spettrogramma</h1>
+      <div id="status">In attesa di permesso o file...</div>
+
+      <div class="controls-container">
+        <div class="control-row">
+          <button id="useMicBtn">Usa Microfono</button>
+          <input type="file" id="audioFile" accept="audio/*" multiple />
+          <select id="playlistSelect"></select>
+        </div>
+        
+        <div class="control-row">
+          <button id="playBtn" disabled>Play</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <button id="prevBtn" disabled>Prec</button>
+          <button id="nextBtn" disabled>Succ</button>
+          <button id="clearPlaylistBtn">Pulisci Playlist</button>
+        </div>
+        
+        <input type="range" id="seekSlider" min="0" max="100" value="0" step="0.1" disabled>
+        
+        <div class="control-row">
+          <button id="saveJpgBtn">Salva JPG</button>
+          <button id="recordVideoBtn">Registra Video</button>
+        </div>
+        
+        <div id="playlistInfo" class="playlist-info"></div>
+      </div>
+
+      <div class="visualizers-container">
+        <div id="mainVisualizer">
+          <div class="visualRow" id="waveformRow">
+            <canvas id="waveformYAxis" width="65" height="200"></canvas>
+            <canvas id="oscilloscope" width="600" height="200"></canvas>
+          </div>
+
+          <div class="visualRow" id="spectrogramRow">
+            <canvas id="spectrogramYAxis" width="65" height="200"></canvas>
+            <canvas id="spectrogram" width="600" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right-pane">
+      <h2>Analizzatore di Armoniche</h2>
+      <div id="harmonicsContainer" class="harmonics-container">
+        </div>
+    </div>
+  </div>
+
+  <script>
+    // Elementi DOM
+    const oscilloscope = document.getElementById("oscilloscope");
+    const oscCtx = oscilloscope.getContext("2d");
+    const spectrogram = document.getElementById("spectrogram");
+    const specCtx = spectrogram.getContext("2d");
+    const waveformYAxis = document.getElementById("waveformYAxis");
+    const waveformYAxisCtx = waveformYAxis.getContext("2d");
+    const spectrogramYAxis = document.getElementById("spectrogramYAxis");
+    const spectrogramYAxisCtx = spectrogramYAxis.getContext("2d");
+    const useMicBtn = document.getElementById("useMicBtn");
+    const audioFileInput = document.getElementById("audioFile");
+    const status = document.getElementById("status");
+    const playBtn = document.getElementById("playBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const seekSlider = document.getElementById("seekSlider");
+    const saveJpgBtn = document.getElementById("saveJpgBtn");
+    const recordVideoBtn = document.getElementById("recordVideoBtn");
+    const harmonicsContainer = document.getElementById("harmonicsContainer");
+    const playlistSelect = document.getElementById("playlistSelect");
+    const clearPlaylistBtn = document.getElementById("clearPlaylistBtn");
+    const playlistInfo = document.getElementById("playlistInfo");
+
+    // Variabili audio
+    let audioCtx = null;
+    let analyser = null;
+    let dataArrayTimeDomain = null;
+    let dataArrayFreq = null;
+    let animationId = null;
+    let audioBuffer = null;
+    let bufferSource = null;
+    let duration = 0;
+    let isPlaying = false;
+    let micStream = null;
+    let recordedChunks = [];
+    let mediaRecorder = null;
+    let harmonicAnalyser = null;
+    let seekInterval = null;
+    let currentPosition = 0;
+    
+    // Variabili playlist
+    let playlist = [];
+    let currentTrackIndex = -1;
+    
+    let minLogFreq, maxLogFreq;
+
+    // Classe per l'analizzatore di armoniche
+    class HarmonicAnalyzer {
+      constructor() {
+        this.NUM_SINUSOIDS = 10;
+        this.harmonics = [];
+        this.t = 0;
+        this.dt = 1/44100;
+      }
+
+      init(analyserNode, audioContext) {
+        this.analyser = analyserNode;
+        this.audioCtx = audioContext;
+        
+        harmonicsContainer.innerHTML = '';
+        this.harmonics = [];
+        
+        for (let i = 0; i < this.NUM_SINUSOIDS; i++) {
+          const container = document.createElement('div');
+          container.className = 'harmonic-item';
+          
+          const label = document.createElement('div');
+          label.className = 'harmonic-label';
+          label.textContent = `Formante ${i+1}: -- Hz -- Amp: --`;
+          
+          const canvas = document.createElement('canvas');
+          canvas.className = 'harmonic-canvas';
+          canvas.width = 280;
+          canvas.height = 30;
+          
+          container.appendChild(label);
+          container.appendChild(canvas);
+          harmonicsContainer.appendChild(container);
+          
+          this.harmonics.push({
+            label,
+            canvas,
+            ctx: canvas.getContext('2d')
+          });
+        }
+      }
+
+      findPeaks(data, sampleRate, fftSize, maxPeaks) {
+        const peaks = [];
+        const minDistance = 5;
+
+        for(let i = 1; i < data.length - 1; i++) {
+          if(data[i] > data[i-1] && data[i] > data[i+1]) {
+            peaks.push({bin: i, value: data[i]});
+          }
+        }
+
+        peaks.sort((a, b) => b.value - a.value);
+
+        const filtered = [];
+        for(const peak of peaks) {
+          if(filtered.length >= maxPeaks) break;
+
+          if(!filtered.some(p => Math.abs(p.bin - peak.bin) < minDistance)) {
+            filtered.push(peak);
+          }
+        }
+
+        return filtered.map(p => ({
+          freq: p.bin * sampleRate / fftSize,
+          amp: p.value / 255
+        }));
+      }
+
+      update() {
+        if (!this.analyser) return;
+        
+        const freqData = new Uint8Array(this.analyser.frequencyBinCount);
+        this.analyser.getByteFrequencyData(freqData);
+        
+        const peaks = this.findPeaks(freqData, this.audioCtx.sampleRate, this.analyser.fftSize, this.NUM_SINUSOIDS);
+        peaks.sort((a, b) => a.freq - b.freq);
+
+        this.harmonics.forEach(({label, canvas, ctx}, i) => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          if (i < peaks.length) {
+            const {freq, amp} = peaks[i];
+            label.textContent = `Formante ${i+1}: ${freq.toFixed(1)} Hz - Amp: ${amp.toFixed(2)}`;
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            const centerY = canvas.height / 2;
+            const scaleY = canvas.height / 3;
+            const points = canvas.width;
+
+            for(let x = 0; x < points; x++) {
+              const y = centerY + scaleY * amp * Math.sin(2 * Math.PI * freq * (this.t + x/44100*50));
+              if(x === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+
+            ctx.stroke();
+          } else {
+            label.textContent = `Formante ${i+1}: -- Hz -- Amp: --`;
+          }
+        });
+
+        this.t += this.dt;
+      }
+    }
+
+    // Funzioni per la playlist
+    function updatePlaylistSelect() {
+      playlistSelect.innerHTML = '';
+      playlist.forEach((track, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = track.name;
+        if (index === currentTrackIndex) {
+          option.selected = true;
+        }
+        playlistSelect.appendChild(option);
+      });
+      
+      playlistInfo.textContent = `Brani: ${playlist.length} | Corrente: ${currentTrackIndex + 1}`;
+      
+      playBtn.disabled = playlist.length === 0 || isPlaying;
+      stopBtn.disabled = playlist.length === 0 || !isPlaying;
+      prevBtn.disabled = currentTrackIndex <= 0;
+      nextBtn.disabled = currentTrackIndex >= playlist.length - 1;
+      seekSlider.disabled = playlist.length === 0;
+    }
+
+    function addToPlaylist(name, arrayBuffer) {
+      playlist.push({
+        name: name,
+        data: arrayBuffer
+      });
+      
+      if (currentTrackIndex === -1 && playlist.length > 0) {
+        currentTrackIndex = 0;
+      }
+      
+      updatePlaylistSelect();
+      
+      if (playlist.length === 1) {
+        playBtn.disabled = false;
+      }
+    }
+
+    function clearPlaylist() {
+      playlist = [];
+      currentTrackIndex = -1;
+      audioBuffer = null;
+      updatePlaylistSelect();
+      stopPlayback();
+      status.textContent = 'Playlist pulita';
+    }
+
+    async function loadTrack(index) {
+      if (index < 0 || index >= playlist.length) return;
+      
+      currentTrackIndex = index;
+      updatePlaylistSelect();
+      
+      try {
+        if (animationId) cancelAnimationFrame(animationId);
+        if (micStream) micStream.getTracks().forEach(track => track.stop());
+        stopPlayback();
+        initAudioContext();
+        
+        audioBuffer = await audioCtx.decodeAudioData(playlist[index].data.slice(0));
+        status.textContent = 'Pronto: ' + playlist[index].name;
+        seekSlider.disabled = false;
+        seekSlider.value = 0;
+        currentPosition = 0;
+        drawStaticAxes();
+        animate();
+      } catch (err) {
+        status.textContent = 'Errore nel decodificare il file audio.';
+        console.error(err);
+      }
+    }
+
+    function initAudioContext() {
+      if (audioCtx) {
+        audioCtx.close();
+      }
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.8;
+      dataArrayTimeDomain = new Uint8Array(analyser.fftSize);
+      dataArrayFreq = new Uint8Array(analyser.frequencyBinCount);
+      
+      if (!harmonicAnalyser) {
+        harmonicAnalyser = new HarmonicAnalyzer();
+      }
+      harmonicAnalyser.init(analyser, audioCtx);
+      
+      const minFreq = 20;
+      const maxFreq = audioCtx.sampleRate / 2;
+      minLogFreq = Math.log(minFreq);
+      maxLogFreq = Math.log(maxFreq);
+    }
+
+    function drawOscilloscope() {
+      analyser.getByteTimeDomainData(dataArrayTimeDomain);
+      oscCtx.fillStyle = '#000';
+      oscCtx.fillRect(0, 0, oscilloscope.width, oscilloscope.height);
+      oscCtx.lineWidth = 2;
+      oscCtx.strokeStyle = '#0f0';
+      oscCtx.beginPath();
+      const sliceWidth = oscilloscope.width / dataArrayTimeDomain.length;
+      let x = 0;
+      for (let i = 0; i < dataArrayTimeDomain.length; i++) {
+        const v = dataArrayTimeDomain[i] / 128.0;
+        const y = v * oscilloscope.height / 2;
+        if (i === 0) oscCtx.moveTo(x, y);
+        else oscCtx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      oscCtx.stroke();
+    }
+
+    function drawSpectrogram() {
+        analyser.getByteFrequencyData(dataArrayFreq);
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = spectrogram.width;
+        tempCanvas.height = spectrogram.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(spectrogram, 0, 0);
+
+        specCtx.drawImage(tempCanvas, -1, 0);
+
+        const nyquist = audioCtx.sampleRate / 2;
+
+        for (let y = 0; y < spectrogram.height; y++) {
+            const logPercent = 1 - (y / spectrogram.height);
+            const freq = Math.exp(minLogFreq + logPercent * (maxLogFreq - minLogFreq));
+            const freqIndex = Math.round((freq / nyquist) * dataArrayFreq.length);
+            const intensity = dataArrayFreq[freqIndex] || 0;
+            const norm = 1 - (intensity / 255);
+            const invertedHue = 400 - (250 * norm);
+            const color = `hsl(${invertedHue}, 100%, ${30 + (1 - norm) * 5}%)`;
+            
+            specCtx.fillStyle = color;
+            specCtx.fillRect(spectrogram.width - 1, y, 1, 1);
+        }
+    }
+    
+    function drawWaveformYAxis() {
+      const h = waveformYAxis.height;
+      const w = waveformYAxis.width;
+      waveformYAxisCtx.clearRect(0, 0, w, h);
+      waveformYAxisCtx.fillStyle = "#0f0";
+      waveformYAxisCtx.font = "12px monospace";
+      waveformYAxisCtx.textAlign = "right";
+      waveformYAxisCtx.textBaseline = "middle";
+
+      const dbLabels = [0, 25, 50, 75];
+      const maxDb = 100;
+
+      dbLabels.forEach(db => {
+        const yOffset = (db / maxDb) * (h / 2);
+        
+        if (db === 0) {
+          waveformYAxisCtx.fillText(db + " dB", w - 5, h / 2);
+        } else {
+          waveformYAxisCtx.fillText(db + " dB", w - 5, (h / 2) - yOffset);
+          waveformYAxisCtx.fillText(db + " dB", w - 5, (h / 2) + yOffset);
+        }
+      });
+    }
+
+    function drawSpectrogramYAxis() {
+      const h = spectrogramYAxis.height;
+      spectrogramYAxisCtx.clearRect(0, 0, spectrogramYAxis.width, h);
+      spectrogramYAxisCtx.fillStyle = "#0f0";
+      spectrogramYAxisCtx.font = "12px monospace";
+      spectrogramYAxisCtx.textAlign = "right";
+      
+      const freqLabels = [20000, 10000, 5000, 2000, 1000, 500, 200, 100];
+      
+      freqLabels.forEach(freq => {
+          if (!minLogFreq || Math.log(freq) > maxLogFreq) return;
+
+          const logFreq = Math.log(freq);
+          const percentY = (logFreq - minLogFreq) / (maxLogFreq - minLogFreq);
+          const y = h * (1 - percentY);
+
+          spectrogramYAxisCtx.textBaseline = "middle";
+          let label = freq >= 1000 ? (freq / 1000) + "k" : freq;
+          spectrogramYAxisCtx.fillText(label + " Hz", spectrogramYAxis.width - 5, y);
+      });
+    }
+
+    function animate() {
+      animationId = requestAnimationFrame(animate);
+      drawOscilloscope();
+      drawSpectrogram();
+      if (harmonicAnalyser) {
+        harmonicAnalyser.update();
+      }
+    }
+    
+    function drawStaticAxes() {
+        drawWaveformYAxis();
+        drawSpectrogramYAxis();
+    }
+
+    function stopPlayback() {
+      if (bufferSource) {
+        try { bufferSource.stop(); } catch (e) {}
+        bufferSource.disconnect();
+        bufferSource = null;
+      }
+      if (seekInterval) {
+        clearInterval(seekInterval);
+        seekInterval = null;
+      }
+      isPlaying = false;
+      updatePlaylistSelect();
+    }
+
+    function playAudioFromPosition(startTime) {
+      if (!audioBuffer || !audioCtx) return;
+      
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      
+      stopPlayback(); // Assicurati che qualsiasi riproduzione precedente sia fermata
+      bufferSource = audioCtx.createBufferSource();
+      bufferSource.buffer = audioBuffer;
+
+      bufferSource.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      
+      bufferSource.start(0, startTime); // Inizia dalla posizione specificata
+      isPlaying = true;
+      duration = audioBuffer.duration;
+      const startTimestamp = audioCtx.currentTime - startTime;
+      updatePlaylistSelect();
+
+      seekInterval = setInterval(() => {
+        if (!isPlaying) {
+          clearInterval(seekInterval);
+          return;
+        }
+        const elapsed = audioCtx.currentTime - startTimestamp;
+        const progress = (elapsed / duration) * 100;
+        seekSlider.value = Math.min(progress, 100);
+        currentPosition = elapsed;
+        
+        if (progress >= 100) {
+          clearInterval(seekInterval);
+          isPlaying = false;
+          seekSlider.value = 0;
+          updatePlaylistSelect();
+        }
+      }, 100);
+
+      bufferSource.onended = () => {
+        isPlaying = false;
+        if (seekInterval) {
+          clearInterval(seekInterval);
+          seekInterval = null;
+        }
+        seekSlider.value = 0;
+        updatePlaylistSelect();
+      };
+    }
+    
+    function playAudio() { // Funzione originale modificata per chiamare playAudioFromPosition
+      playAudioFromPosition((seekSlider.value / 100) * (audioBuffer?.duration || 0));
+    }
+
+    // Event Listeners
+    useMicBtn.addEventListener("click", async () => {
+      if (animationId) cancelAnimationFrame(animationId);
+      if (micStream) micStream.getTracks().forEach(track => track.stop());
+      stopPlayback();
+      initAudioContext();
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStream = stream;
+        const micSource = audioCtx.createMediaStreamSource(stream);
+        micSource.connect(analyser);
+        status.textContent = 'Microfono attivo';
+        playBtn.disabled = true;
+        stopBtn.disabled = true;
+        seekSlider.disabled = true;
+        drawStaticAxes();
+        animate();
+      } catch (err) {
+        status.textContent = 'Errore microfono: ' + err.message;
+      }
+    });
+
+    audioFileInput.addEventListener("change", () => {
+      if (audioFileInput.files.length > 0) {
+        const files = Array.from(audioFileInput.files);
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            addToPlaylist(file.name, e.target.result);
+          };
+          reader.readAsArrayBuffer(file);
+        });
+        status.textContent = `Aggiunti ${files.length} file alla playlist`;
+      }
+    });
+
+    playlistSelect.addEventListener("change", () => {
+      const selectedIndex = parseInt(playlistSelect.value);
+      if (selectedIndex >= 0 && selectedIndex < playlist.length) {
+        loadTrack(selectedIndex);
+      }
+    });
+
+    seekSlider.addEventListener("input", function() {
+      // Calcola la nuova posizione basata sul valore dello slider
+      currentPosition = (this.value / 100) * (audioBuffer?.duration || 0);
+
+      // Se l'audio è in riproduzione, fermalo e riavvialo dalla nuova posizione
+      if (isPlaying) {
+        stopPlayback(); // Ferma la riproduzione corrente
+        playAudioFromPosition(currentPosition); // Avvia da currentPosition
+      }
+      // Se l'audio non è in riproduzione, l'aggiornamento di currentPosition è sufficiente.
+    });
+
+    playBtn.addEventListener("click", () => {
+      if (playlist.length === 0) return;
+      
+      if (!isPlaying) {
+        // Questa condizione controlla se la traccia corrente deve essere caricata nell'audioBuffer.
+        // È vera se:
+        // 1. Nessuna traccia è stata ancora selezionata/caricata (currentTrackIndex è -1 all'inizio).
+        // 2. Oppure, se audioBuffer è null (es. dopo aver svuotato la playlist o al primo caricamento).
+        if (currentTrackIndex === -1 || audioBuffer === null) {
+          // Se currentTrackIndex è -1 ma ci sono tracce, impostiamo la prima traccia.
+          if (currentTrackIndex === -1 && playlist.length > 0) {
+            currentTrackIndex = 0;
+          }
+          // Procediamo solo se currentTrackIndex è ora valido.
+          if (currentTrackIndex !== -1) {
+            loadTrack(currentTrackIndex).then(() => playAudioFromPosition(0)); // Carica e riproduci dall'inizio
+          }
+        } else {
+          // Se audioBuffer è già caricato per la traccia corrente, riproduci dalla posizione attuale.
+          playAudioFromPosition(currentPosition);
+        }
+      }
+    });
+
+    stopBtn.addEventListener("click", () => {
+      if (isPlaying) {
+        stopPlayback();
+        seekSlider.value = 0;
+        currentPosition = 0;
+      }
+    });
+
+    prevBtn.addEventListener("click", () => {
+      if (currentTrackIndex > 0) {
+        loadTrack(currentTrackIndex - 1);
+      }
+    });
+
+    nextBtn.addEventListener("click", () => {
+      if (currentTrackIndex < playlist.length - 1) {
+        loadTrack(currentTrackIndex + 1);
+      }
+    });
+
+    clearPlaylistBtn.addEventListener("click", () => {
+      clearPlaylist();
+    });
+
+    saveJpgBtn.addEventListener("click", () => {
+      const tempCanvas = document.createElement("canvas");
+      const axisWidth = 65;
+      const visualizerWidth = 600;
+      
+      tempCanvas.width = axisWidth + visualizerWidth;
+      tempCanvas.height = oscilloscope.height + spectrogram.height;
+
+      const ctx = tempCanvas.getContext("2d");
+      ctx.fillStyle = "#111";
+      ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+      ctx.drawImage(waveformYAxis, 0, 0);
+      ctx.drawImage(oscilloscope, axisWidth, 0);
+      ctx.drawImage(spectrogramYAxis, 0, oscilloscope.height);
+      ctx.drawImage(spectrogram, axisWidth, oscilloscope.height);
+
+      const link = document.createElement("a");
+      link.download = "analizzatore_audio.jpg";
+      link.href = tempCanvas.toDataURL("image/jpeg", 0.9);
+      link.click();
+    });
+    
+    recordVideoBtn.addEventListener("click", () => {
+       if (recordVideoBtn.textContent === "Ferma registrazione") {
+         if(mediaRecorder) mediaRecorder.stop();
+         recordVideoBtn.textContent = "Registra Video";
+         return;
+       }
+
+       const axisWidth = 65;
+       const visualizerWidth = 600;
+       const combinedWidth = axisWidth + visualizerWidth;
+       const combinedHeight = 200 + 200;
+
+       const combinedCanvas = document.createElement("canvas");
+       combinedCanvas.width = combinedWidth;
+       combinedCanvas.height = combinedHeight;
+       const combinedCtx = combinedCanvas.getContext("2d");
+
+       let rafId;
+       const stream = combinedCanvas.captureStream(30);
+       const audioDestination = audioCtx.createMediaStreamDestination();
+       analyser.connect(audioDestination);
+       
+       const combinedStream = new MediaStream([...stream.getVideoTracks(), ...audioDestination.stream.getAudioTracks()]);
+       mediaRecorder = new MediaRecorder(combinedStream, { mimeType: "video/webm; codecs=vp9,opus" });
+
+       mediaRecorder.ondataavailable = e => {
+         if (e.data.size > 0) recordedChunks.push(e.data);
+       };
+
+       mediaRecorder.onstop = () => {
+         cancelAnimationFrame(rafId);
+         analyser.disconnect(audioDestination);
+         const blob = new Blob(recordedChunks, { type: "video/webm" });
+         const url = URL.createObjectURL(blob);
+         const a = document.createElement("a");
+         a.href = url;
+         let filename = prompt("Nome file video (senza estensione):", "registrazione_audio");
+         if (!filename) filename = "registrazione_audio";
+         a.download = filename + ".webm";
+         a.click();
+         URL.revokeObjectURL(url);
+         status.textContent = "Registrazione salvata.";
+       };
+
+       recordedChunks = [];
+       mediaRecorder.start();
+       recordVideoBtn.textContent = "Ferma registrazione";
+       status.textContent = "Registrazione avviata...";
+
+       function drawCombined() {
+         combinedCtx.fillStyle = "#111";
+         combinedCtx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+         combinedCtx.drawImage(waveformYAxis, 0, 0);
+         combinedCtx.drawImage(oscilloscope, axisWidth, 0);
+         combinedCtx.drawImage(spectrogramYAxis, 0, 200);
+         combinedCtx.drawImage(spectrogram, axisWidth, 200);
+         rafId = requestAnimationFrame(drawCombined);
+       }
+       drawCombined();
+    });
+
+    // Inizializzazione
+    drawStaticAxes();
+  </script>
+</body>
+</html>
