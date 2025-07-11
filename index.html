@@ -18,9 +18,93 @@
       height: 100vh;
     }
 
+    .filters-panel {
+      width: 200px;
+      padding: 15px;
+      background-color: #1a1a1a;
+      border-right: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      overflow-y: auto;
+    }
+
+    .filters-panel h3 {
+      color: #0f0;
+      margin: 0 0 10px 0;
+      text-align: center;
+      font-size: 14px;
+      border-bottom: 1px solid #0f0;
+      padding-bottom: 5px;
+    }
+
+    .filter-control {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .filter-control label {
+      color: #0f0;
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+
+    .filter-control select {
+      width: 100%;
+      background-color: #222;
+      border: 1px solid #0f0;
+      color: #0f0;
+      padding: 5px;
+      font-size: 12px;
+    }
+
+    .filter-control input[type="range"] {
+      width: 100%;
+      margin: 5px 0;
+      -webkit-appearance: none;
+      height: 8px;
+      background: #222;
+      outline: none;
+    }
+
+    .filter-control input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: #0f0;
+      cursor: pointer;
+    }
+
+    .filter-presets {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 5px;
+      margin-top: 10px;
+    }
+
+    .filter-presets button {
+      padding: 3px;
+      font-size: 11px;
+    }
+
+    .filter-visualizer {
+      height: 100px;
+      background-color: #000;
+      border: 1px solid #0f0;
+      margin-top: 10px;
+      position: relative;
+    }
+
+    .filter-visualizer canvas {
+      width: 100%;
+      height: 100%;
+    }
+
     .left-pane {
-      width: 70%;
-      padding: 20px;
+      width: calc(70% - 200px);
+      padding: 10px 20px 20px;
       box-sizing: border-box;
       border-right: 1px solid #333;
       overflow-y: auto;
@@ -38,13 +122,13 @@
     }
 
     h1, #status {
-      margin-bottom: 10px;
+      margin-bottom: 5px;
       text-align: center;
     }
 
     .controls-container {
       order: 1;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
     }
 
     .control-row {
@@ -70,6 +154,20 @@
       cursor: pointer;
     }
 
+    button:hover, input[type="file"]:hover, select:hover {
+      background-color: #333;
+    }
+
+    button:active {
+      background-color: #444;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      border-color: #555;
+    }
+
     select {
       background-color: #222;
       border: 1px solid #0f0;
@@ -78,13 +176,6 @@
       font-size: 14px;
       padding: 6px 12px;
       max-width: 300px;
-    }
-
-    input[type="range"] {
-      width: 100%;
-      max-width: 600px;
-      margin: 10px auto;
-      display: block;
     }
 
     #mainVisualizer {
@@ -152,10 +243,87 @@
       color: #0f0;
       text-align: center;
     }
+
+    .value-display {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #0f0;
+    }
+
+    .filter-control input:disabled, 
+    .filter-control select:disabled, 
+    .preset-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      border-color: #555;
+    }
   </style>
 </head>
 <body>
   <div class="split-container">
+    <div class="filters-panel">
+      <h3>Filtri Audio</h3>
+      
+      <div class="filter-control">
+        <label for="filterType">Tipo Filtro:</label>
+        <select id="filterType">
+          <option value="none">Nessun filtro</option>
+          <option value="lowpass">Low-pass</option>
+          <option value="highpass">High-pass</option>
+          <option value="bandpass">Band-pass</option>
+          <option value="lowshelf">Low-shelf</option>
+          <option value="highshelf">High-shelf</option>
+          <option value="peaking">Peaking</option>
+          <option value="notch">Notch</option>
+          <option value="allpass">All-pass</option>
+        </select>
+      </div>
+      
+      <div class="filter-control">
+        <label for="filterFreq">Frequenza:</label>
+        <input type="range" id="filterFreq" min="20" max="20000" value="1000" step="1">
+        <div class="value-display">
+          <span>20Hz</span>
+          <span id="freqValue">1000</span>
+          <span>20kHz</span>
+        </div>
+      </div>
+      
+      <div class="filter-control">
+        <label for="filterQ">Fattore Q:</label>
+        <input type="range" id="filterQ" min="0.1" max="10" value="1" step="0.1">
+        <div class="value-display">
+          <span>0.1</span>
+          <span id="qValue">1.0</span>
+          <span>10.0</span>
+        </div>
+      </div>
+      
+      <div class="filter-control" id="gainControl" style="display: none;">
+        <label for="filterGain">Guadagno (dB):</label>
+        <input type="range" id="filterGain" min="-40" max="40" value="0" step="1">
+        <div class="value-display">
+          <span>-40</span>
+          <span id="gainValue">0</span>
+          <span>+40</span>
+        </div>
+      </div>
+      
+      <div class="filter-visualizer">
+        <canvas id="filterCanvas"></canvas>
+      </div>
+      
+      <div class="filter-presets">
+        <button class="preset-btn" data-preset="bassi">Enfasi Bassi</button>
+        <button class="preset-btn" data-preset="acuti">Enfasi Acuti</button>
+        <button class="preset-btn" data-preset="telefono">Effetto Telefono</button>
+        <button class="preset-btn" data-preset="radio">Effetto Radio</button>
+        <button class="preset-btn" data-preset="muffled">Suono Ovattato</button>
+        <button class="preset-btn" data-preset="reset">Reset</button>
+      </div>
+    </div>
+
     <div class="left-pane">
       <h1>Analizzatore Audio - Forma d'onda e Spettrogramma</h1>
       <div id="status">In attesa di permesso o file...</div>
@@ -175,10 +343,9 @@
           <button id="clearPlaylistBtn">Pulisci Playlist</button>
         </div>
         
-        <input type="range" id="seekSlider" min="0" max="100" value="0" step="0.1" disabled>
-        
         <div class="control-row">
-          <button id="saveJpgBtn">Salva JPG</button>
+          <button id="saveJpgBtn">Salva JPG Waveform</button>
+          <button id="saveHarmonicsBtn">Salva JPG Fourier</button>
           <button id="recordVideoBtn">Registra Video</button>
         </div>
         
@@ -203,7 +370,7 @@
     <div class="right-pane">
       <h2>Analizzatore di Armoniche</h2>
       <div id="harmonicsContainer" class="harmonics-container">
-        </div>
+      </div>
     </div>
   </div>
 
@@ -224,13 +391,26 @@
     const stopBtn = document.getElementById("stopBtn");
     const prevBtn = document.getElementById("prevBtn");
     const nextBtn = document.getElementById("nextBtn");
-    const seekSlider = document.getElementById("seekSlider");
     const saveJpgBtn = document.getElementById("saveJpgBtn");
+    const saveHarmonicsBtn = document.getElementById("saveHarmonicsBtn");
     const recordVideoBtn = document.getElementById("recordVideoBtn");
     const harmonicsContainer = document.getElementById("harmonicsContainer");
     const playlistSelect = document.getElementById("playlistSelect");
     const clearPlaylistBtn = document.getElementById("clearPlaylistBtn");
     const playlistInfo = document.getElementById("playlistInfo");
+
+    // Elementi filtri
+    const filterTypeSelect = document.getElementById("filterType");
+    const filterFreqControl = document.getElementById("filterFreq");
+    const filterQControl = document.getElementById("filterQ");
+    const filterGainControl = document.getElementById("filterGain");
+    const gainControl = document.getElementById("gainControl");
+    const freqValue = document.getElementById("freqValue");
+    const qValue = document.getElementById("qValue");
+    const gainValue = document.getElementById("gainValue");
+    const filterCanvas = document.getElementById("filterCanvas");
+    const filterCtx = filterCanvas.getContext("2d");
+    const presetButtons = document.querySelectorAll(".preset-btn");
 
     // Variabili audio
     let audioCtx = null;
@@ -240,20 +420,24 @@
     let animationId = null;
     let audioBuffer = null;
     let bufferSource = null;
-    let duration = 0;
     let isPlaying = false;
     let micStream = null;
     let recordedChunks = [];
     let mediaRecorder = null;
     let harmonicAnalyser = null;
-    let seekInterval = null;
-    let currentPosition = 0;
+    let filterNode = null;
+    let micSource = null;
+    let micAnalyser = null;
     
     // Variabili playlist
     let playlist = [];
     let currentTrackIndex = -1;
     
     let minLogFreq, maxLogFreq;
+
+    // Inizializza canvas del filtro
+    filterCanvas.width = filterCanvas.offsetWidth;
+    filterCanvas.height = filterCanvas.offsetHeight;
 
     // Classe per l'analizzatore di armoniche
     class HarmonicAnalyzer {
@@ -296,33 +480,6 @@
         }
       }
 
-      findPeaks(data, sampleRate, fftSize, maxPeaks) {
-        const peaks = [];
-        const minDistance = 5;
-
-        for(let i = 1; i < data.length - 1; i++) {
-          if(data[i] > data[i-1] && data[i] > data[i+1]) {
-            peaks.push({bin: i, value: data[i]});
-          }
-        }
-
-        peaks.sort((a, b) => b.value - a.value);
-
-        const filtered = [];
-        for(const peak of peaks) {
-          if(filtered.length >= maxPeaks) break;
-
-          if(!filtered.some(p => Math.abs(p.bin - peak.bin) < minDistance)) {
-            filtered.push(peak);
-          }
-        }
-
-        return filtered.map(p => ({
-          freq: p.bin * sampleRate / fftSize,
-          amp: p.value / 255
-        }));
-      }
-
       update() {
         if (!this.analyser) return;
         
@@ -360,6 +517,256 @@
 
         this.t += this.dt;
       }
+
+      findPeaks(data, sampleRate, fftSize, maxPeaks) {
+        const peaks = [];
+        const minDistance = 5;
+
+        for(let i = 1; i < data.length - 1; i++) {
+          if(data[i] > data[i-1] && data[i] > data[i+1]) {
+            peaks.push({bin: i, value: data[i]});
+          }
+        }
+
+        peaks.sort((a, b) => b.value - a.value);
+
+        const filtered = [];
+        for(const peak of peaks) {
+          if(filtered.length >= maxPeaks) break;
+
+          if(!filtered.some(p => Math.abs(p.bin - peak.bin) < minDistance)) {
+            filtered.push(peak);
+          }
+        }
+
+        return filtered.map(p => ({
+          freq: p.bin * sampleRate / fftSize,
+          amp: p.value / 255
+        }));
+      }
+    }
+
+    // Funzioni per i filtri
+    function updateFilterLabels() {
+      freqValue.textContent = filterFreqControl.value;
+      qValue.textContent = filterQControl.value.toFixed(1);
+      gainValue.textContent = filterGainControl.value;
+    }
+
+    function drawFilterResponse() {
+      if (!filterNode || !audioCtx) return;
+      
+      const width = filterCanvas.width;
+      const height = filterCanvas.height;
+      
+      filterCtx.clearRect(0, 0, width, height);
+      
+      // Griglia
+      filterCtx.strokeStyle = '#0f0';
+      filterCtx.lineWidth = 0.5;
+      filterCtx.beginPath();
+      
+      // Linee orizzontali
+      for (let y = 0; y <= height; y += height / 4) {
+        filterCtx.moveTo(0, y);
+        filterCtx.lineTo(width, y);
+      }
+      
+      // Linee verticali
+      for (let x = 0; x <= width; x += width / 8) {
+        filterCtx.moveTo(x, 0);
+        filterCtx.lineTo(x, height);
+      }
+      
+      filterCtx.stroke();
+      
+      // Calcola la risposta in frequenza
+      const freqData = new Float32Array(width);
+      const magResponse = new Float32Array(width);
+      const nyquist = audioCtx.sampleRate / 2;
+      
+      for (let i = 0; i < width; i++) {
+        const freq = 20 * Math.pow(20000 / 20, i / width);
+        freqData[i] = freq;
+      }
+      
+      filterNode.getFrequencyResponse(freqData, magResponse, new Float32Array(width));
+      
+      // Disegna la curva di risposta
+      filterCtx.strokeStyle = '#0f0';
+      filterCtx.lineWidth = 2;
+      filterCtx.beginPath();
+      
+      for (let i = 0; i < width; i++) {
+        const x = i;
+        const y = height - (magResponse[i] * height * 0.8 + height * 0.1);
+        
+        if (i === 0) {
+          filterCtx.moveTo(x, y);
+        } else {
+          filterCtx.lineTo(x, y);
+        }
+      }
+      
+      filterCtx.stroke();
+      
+      // Aggiungi indicatori per il fattore Q
+      if (filterTypeSelect.value !== 'none' && filterTypeSelect.value !== 'allpass') {
+        const freq = filterNode.frequency.value;
+        const q = filterNode.Q.value;
+        
+        // Calcola la larghezza di banda (per filtri passabanda)
+        let bw, f1, f2;
+        if (filterTypeSelect.value === 'bandpass' || filterTypeSelect.value === 'notch' || filterTypeSelect.value === 'peaking') {
+          bw = freq / q;
+          f1 = freq - bw/2;
+          f2 = freq + bw/2;
+        } else {
+          // Per altri filtri mostra solo la frequenza centrale
+          f1 = f2 = freq;
+        }
+        
+        // Converti frequenze in posizioni X
+        const xFreq = width * (Math.log(freq) - minLogFreq) / (maxLogFreq - minLogFreq);
+        const xF1 = width * (Math.log(f1) - minLogFreq) / (maxLogFreq - minLogFreq);
+        const xF2 = width * (Math.log(f2) - minLogFreq) / (maxLogFreq - minLogFreq);
+        
+        // Disegna linea verticale per la frequenza centrale
+        filterCtx.strokeStyle = '#ff0';
+        filterCtx.lineWidth = 1;
+        filterCtx.beginPath();
+        filterCtx.moveTo(xFreq, 0);
+        filterCtx.lineTo(xFreq, height);
+        filterCtx.stroke();
+        
+        // Disegna area per la larghezza di banda (solo per alcuni tipi di filtro)
+        if (filterTypeSelect.value === 'bandpass' || filterTypeSelect.value === 'notch' || filterTypeSelect.value === 'peaking') {
+          filterCtx.fillStyle = 'rgba(255, 255, 0, 0.2)';
+          filterCtx.beginPath();
+          filterCtx.moveTo(xF1, 0);
+          filterCtx.lineTo(xF1, height);
+          filterCtx.lineTo(xF2, height);
+          filterCtx.lineTo(xF2, 0);
+          filterCtx.closePath();
+          filterCtx.fill();
+          
+          // Etichette per le frequenze di taglio
+          filterCtx.fillStyle = '#ff0';
+          filterCtx.font = '10px monospace';
+          filterCtx.textAlign = 'center';
+          filterCtx.fillText('f1', xF1, height - 5);
+          filterCtx.fillText('f2', xF2, height - 5);
+        }
+        
+        // Etichetta per la frequenza centrale
+        filterCtx.fillStyle = '#ff0';
+        filterCtx.fillText('fc', xFreq, 15);
+      }
+      
+      // Etichette degli assi
+      filterCtx.fillStyle = '#0f0';
+      filterCtx.font = '10px monospace';
+      filterCtx.textAlign = 'center';
+      
+      // Frequenze sull'asse X (logaritmiche)
+      const freqLabels = [20, 100, 500, 2000, 8000, 20000];
+      freqLabels.forEach(freq => {
+        const x = width * (Math.log(freq) / Math.log(20000));
+        filterCtx.fillText(freq >= 1000 ? (freq/1000) + 'k' : freq, x, height - 2);
+      });
+      
+      // dB sull'asse Y
+      const dbLabels = ['-24dB', '-12dB', '0dB', '+12dB', '+24dB'];
+      dbLabels.forEach((label, i) => {
+        const y = height * (0.1 + i * 0.2);
+        filterCtx.textAlign = 'left';
+        filterCtx.fillText(label, 5, y + 3);
+      });
+      
+      // Titolo del filtro
+      filterCtx.textAlign = 'center';
+      filterCtx.fillText(`Filtro: ${filterTypeSelect.options[filterTypeSelect.selectedIndex].text} (Q=${filterNode.Q.value.toFixed(2)})`, width/2, 12);
+    }
+
+    function applyFilterPreset(preset) {
+      switch(preset) {
+        case 'bassi':
+          filterTypeSelect.value = 'lowshelf';
+          filterFreqControl.value = 250;
+          filterQControl.value = 1;
+          filterGainControl.value = 10;
+          break;
+          
+        case 'acuti':
+          filterTypeSelect.value = 'highshelf';
+          filterFreqControl.value = 4000;
+          filterQControl.value = 1;
+          filterGainControl.value = 10;
+          break;
+          
+        case 'telefono':
+          filterTypeSelect.value = 'bandpass';
+          filterFreqControl.value = 1500;
+          filterQControl.value = 3;
+          break;
+          
+        case 'radio':
+          filterTypeSelect.value = 'bandpass';
+          filterFreqControl.value = 1000;
+          filterQControl.value = 1.5;
+          break;
+          
+        case 'muffled':
+          filterTypeSelect.value = 'lowpass';
+          filterFreqControl.value = 800;
+          filterQControl.value = 0.5;
+          break;
+          
+        case 'reset':
+          filterTypeSelect.value = 'none';
+          filterFreqControl.value = 1000;
+          filterQControl.value = 1;
+          filterGainControl.value = 0;
+          break;
+      }
+      
+      updateFilter();
+      updateFilterLabels();
+      drawFilterResponse();
+    }
+
+    function updateFilter() {
+      if (!filterNode || !audioCtx) return;
+      
+      const type = filterTypeSelect.value;
+      filterNode.type = type;
+      filterNode.frequency.exponentialRampToValueAtTime(filterFreqControl.value, audioCtx.currentTime + 0.01);
+      filterNode.Q.linearRampToValueAtTime(filterQControl.value, audioCtx.currentTime + 0.01);
+      
+      if (type === 'lowshelf' || type === 'highshelf' || type === 'peaking') {
+        filterNode.gain.linearRampToValueAtTime(filterGainControl.value, audioCtx.currentTime + 0.01);
+        gainControl.style.display = 'block';
+      } else {
+        gainControl.style.display = 'none';
+      }
+      
+      // Ricollega le sorgenti audio se presenti
+      reconnectAudioSources();
+      
+      // Forza il ridisegno immediato
+      drawFilterResponse();
+    }
+
+    function reconnectAudioSources() {
+      if (bufferSource && isPlaying) {
+        bufferSource.disconnect();
+        if (filterTypeSelect.value !== 'none') {
+          bufferSource.connect(filterNode);
+          filterNode.connect(analyser);
+        } else {
+          bufferSource.connect(analyser);
+        }
+      }
     }
 
     // Funzioni per la playlist
@@ -381,7 +788,6 @@
       stopBtn.disabled = playlist.length === 0 || !isPlaying;
       prevBtn.disabled = currentTrackIndex <= 0;
       nextBtn.disabled = currentTrackIndex >= playlist.length - 1;
-      seekSlider.disabled = playlist.length === 0;
     }
 
     function addToPlaylist(name, arrayBuffer) {
@@ -411,24 +817,36 @@
     }
 
     async function loadTrack(index) {
-      if (index < 0 || index >= playlist.length) return;
+      if (index < 0 || index >= playlist.length) {
+        // Se non ci sono brani validi e il microfono era attivo, ritorna al microfono
+        if (useMicBtn.textContent === "Disattiva Microfono") {
+          resetToMicrophone();
+        }
+        return;
+      }
       
       currentTrackIndex = index;
       updatePlaylistSelect();
       
       try {
         if (animationId) cancelAnimationFrame(animationId);
-        if (micStream) micStream.getTracks().forEach(track => track.stop());
+        if (micStream) {
+          micStream.getTracks().forEach(track => track.stop());
+          micSource = null;
+          micAnalyser = null;
+          useMicBtn.textContent = "Usa Microfono";
+        }
         stopPlayback();
         initAudioContext();
         
         audioBuffer = await audioCtx.decodeAudioData(playlist[index].data.slice(0));
         status.textContent = 'Pronto: ' + playlist[index].name;
-        seekSlider.disabled = false;
-        seekSlider.value = 0;
-        currentPosition = 0;
         drawStaticAxes();
         animate();
+        
+        // Riabilita i controlli dei filtri
+        document.querySelectorAll('.filter-control input, .filter-control select, .preset-btn')
+          .forEach(el => el.disabled = false);
       } catch (err) {
         status.textContent = 'Errore nel decodificare il file audio.';
         console.error(err);
@@ -439,12 +857,21 @@
       if (audioCtx) {
         audioCtx.close();
       }
+      
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Crea i nodi audio
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.8;
       dataArrayTimeDomain = new Uint8Array(analyser.fftSize);
       dataArrayFreq = new Uint8Array(analyser.frequencyBinCount);
+      
+      filterNode = audioCtx.createBiquadFilter();
+      updateFilter();
+      
+      // Connetti l'analizzatore all'output
+      analyser.connect(audioCtx.destination);
       
       if (!harmonicAnalyser) {
         harmonicAnalyser = new HarmonicAnalyzer();
@@ -455,6 +882,8 @@
       const maxFreq = audioCtx.sampleRate / 2;
       minLogFreq = Math.log(minFreq);
       maxLogFreq = Math.log(maxFreq);
+      
+      drawFilterResponse();
     }
 
     function drawOscilloscope() {
@@ -555,6 +984,11 @@
       if (harmonicAnalyser) {
         harmonicAnalyser.update();
       }
+      
+      // Aggiorna la risposta del filtro in tempo reale
+      if (filterNode && filterTypeSelect.value !== 'none') {
+        drawFilterResponse();
+      }
     }
     
     function drawStaticAxes() {
@@ -568,92 +1002,185 @@
         bufferSource.disconnect();
         bufferSource = null;
       }
-      if (seekInterval) {
-        clearInterval(seekInterval);
-        seekInterval = null;
-      }
       isPlaying = false;
       updatePlaylistSelect();
     }
 
-    function playAudioFromPosition(startTime) {
+    function playAudio() {
       if (!audioBuffer || !audioCtx) return;
       
       if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
+        audioCtx.resume().then(() => {
+          startPlayback();
+        });
+      } else {
+        startPlayback();
       }
+    }
+
+    function startPlayback() {
+      stopPlayback();
       
-      stopPlayback(); // Assicurati che qualsiasi riproduzione precedente sia fermata
       bufferSource = audioCtx.createBufferSource();
       bufferSource.buffer = audioBuffer;
-
-      bufferSource.connect(analyser);
-      analyser.connect(audioCtx.destination);
       
-      bufferSource.start(0, startTime); // Inizia dalla posizione specificata
+      // Collegamento corretto con/senza filtro
+      if (filterTypeSelect.value !== 'none') {
+        bufferSource.connect(filterNode);
+        filterNode.connect(analyser);
+      } else {
+        bufferSource.connect(analyser);
+      }
+      
+      bufferSource.start(0);
       isPlaying = true;
-      duration = audioBuffer.duration;
-      const startTimestamp = audioCtx.currentTime - startTime;
       updatePlaylistSelect();
-
-      seekInterval = setInterval(() => {
-        if (!isPlaying) {
-          clearInterval(seekInterval);
-          return;
-        }
-        const elapsed = audioCtx.currentTime - startTimestamp;
-        const progress = (elapsed / duration) * 100;
-        seekSlider.value = Math.min(progress, 100);
-        currentPosition = elapsed;
-        
-        if (progress >= 100) {
-          clearInterval(seekInterval);
-          isPlaying = false;
-          seekSlider.value = 0;
-          updatePlaylistSelect();
-        }
-      }, 100);
 
       bufferSource.onended = () => {
         isPlaying = false;
-        if (seekInterval) {
-          clearInterval(seekInterval);
-          seekInterval = null;
-        }
-        seekSlider.value = 0;
         updatePlaylistSelect();
       };
     }
-    
-    function playAudio() { // Funzione originale modificata per chiamare playAudioFromPosition
-      playAudioFromPosition((seekSlider.value / 100) * (audioBuffer?.duration || 0));
-    }
 
-    // Event Listeners
-    useMicBtn.addEventListener("click", async () => {
-      if (animationId) cancelAnimationFrame(animationId);
-      if (micStream) micStream.getTracks().forEach(track => track.stop());
-      stopPlayback();
-      initAudioContext();
-      if (audioCtx.state === 'suspended') {
-        await audioCtx.resume();
-      }
+    async function startMicrophone() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStream = stream;
-        const micSource = audioCtx.createMediaStreamSource(stream);
-        micSource.connect(analyser);
-        status.textContent = 'Microfono attivo';
+        if (micStream) {
+          micStream.getTracks().forEach(track => track.stop());
+          if (micSource) micSource.disconnect();
+          if (micAnalyser) micAnalyser.disconnect();
+        }
+        
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        initAudioContext(); // Inizializza il contesto audio
+        
+        // Crea un AnalyserNode separato per il microfono
+        micAnalyser = audioCtx.createAnalyser();
+        micAnalyser.fftSize = 2048;
+        
+        micSource = audioCtx.createMediaStreamSource(micStream);
+        
+        // Collegamento SENZA output audio (solo all'analizzatore)
+        micSource.connect(micAnalyser);
+        
+        // Aggiorna gli analizzatori usati per la visualizzazione
+        analyser = micAnalyser;
+        dataArrayTimeDomain = new Uint8Array(analyser.fftSize);
+        dataArrayFreq = new Uint8Array(analyser.frequencyBinCount);
+        
+        // Inizializza l'analizzatore di armoniche con il nuovo analizzatore
+        if (harmonicAnalyser) {
+          harmonicAnalyser.init(micAnalyser, audioCtx);
+        }
+        
+        // Mostra avviso sui filtri
+        status.textContent = 'Microfono attivo - I filtri non sono applicabili al microfono';
+        
+        // Disabilita i controlli dei filtri
+        document.querySelectorAll('.filter-control input, .filter-control select, .preset-btn')
+          .forEach(el => el.disabled = true);
+        
         playBtn.disabled = true;
-        stopBtn.disabled = true;
-        seekSlider.disabled = true;
+        stopBtn.disabled = false;
         drawStaticAxes();
         animate();
       } catch (err) {
         status.textContent = 'Errore microfono: ' + err.message;
+        console.error(err);
+      }
+    }
+
+    function resetToMicrophone() {
+      if (micStream) {
+        // Ricrea la connessione del microfono
+        micSource = audioCtx.createMediaStreamSource(micStream);
+        micAnalyser = audioCtx.createAnalyser();
+        micAnalyser.fftSize = 2048;
+        micSource.connect(micAnalyser);
+        analyser = micAnalyser;
+        
+        // Reinizializza l'analizzatore di armoniche
+        if (harmonicAnalyser) {
+          harmonicAnalyser.init(micAnalyser, audioCtx);
+        }
+        
+        status.textContent = 'Microfono attivo - I filtri non sono applicabili al microfono';
+        drawStaticAxes();
+        animate();
+      }
+    }
+
+    // Event Listeners per i filtri
+    filterTypeSelect.addEventListener("change", () => {
+      updateFilter();
+      updateFilterLabels();
+      drawFilterResponse();
+    });
+
+    filterFreqControl.addEventListener("input", () => {
+      if (filterNode) {
+        filterNode.frequency.exponentialRampToValueAtTime(filterFreqControl.value, audioCtx.currentTime + 0.01);
+      }
+      updateFilterLabels();
+      drawFilterResponse();
+    });
+
+    filterQControl.addEventListener("input", () => {
+      if (filterNode) {
+        filterNode.Q.linearRampToValueAtTime(filterQControl.value, audioCtx.currentTime + 0.01);
+      }
+      updateFilterLabels();
+      drawFilterResponse();
+    });
+
+    filterGainControl.addEventListener("input", () => {
+      if (filterNode) {
+        filterNode.gain.linearRampToValueAtTime(filterGainControl.value, audioCtx.currentTime + 0.01);
+      }
+      updateFilterLabels();
+      drawFilterResponse();
+    });
+
+    // Event Listeners per i preset
+    presetButtons.forEach(button => {
+      button.addEventListener("click", () => {
+        applyFilterPreset(button.dataset.preset);
+      });
+    });
+
+    // Event Listener per il microfono
+    useMicBtn.addEventListener("click", async () => {
+      if (animationId) cancelAnimationFrame(animationId);
+      
+      if (useMicBtn.textContent === "Usa Microfono") {
+        await startMicrophone();
+        useMicBtn.textContent = "Disattiva Microfono";
+      } else {
+        if (micStream) {
+          micStream.getTracks().forEach(track => track.stop());
+          if (micSource) micSource.disconnect();
+          if (micAnalyser) micAnalyser.disconnect();
+          micSource = null;
+          micAnalyser = null;
+          micStream = null;
+        }
+        useMicBtn.textContent = "Usa Microfono";
+        status.textContent = "Microfono disattivato";
+        
+        // Riabilita i controlli dei filtri
+        document.querySelectorAll('.filter-control input, .filter-control select, .preset-btn')
+          .forEach(el => el.disabled = false);
+        
+        playBtn.disabled = playlist.length === 0;
+        stopBtn.disabled = true;
+        
+        // Se c'è un brano in playlist, ricaricalo
+        if (currentTrackIndex >= 0) {
+          loadTrack(currentTrackIndex);
+        }
       }
     });
 
+    // Altri Event Listeners
     audioFileInput.addEventListener("change", () => {
       if (audioFileInput.files.length > 0) {
         const files = Array.from(audioFileInput.files);
@@ -675,38 +1202,21 @@
       }
     });
 
-    seekSlider.addEventListener("input", function() {
-      // Calcola la nuova posizione basata sul valore dello slider
-      currentPosition = (this.value / 100) * (audioBuffer?.duration || 0);
-
-      // Se l'audio è in riproduzione, fermalo e riavvialo dalla nuova posizione
-      if (isPlaying) {
-        stopPlayback(); // Ferma la riproduzione corrente
-        playAudioFromPosition(currentPosition); // Avvia da currentPosition
-      }
-      // Se l'audio non è in riproduzione, l'aggiornamento di currentPosition è sufficiente.
-    });
-
     playBtn.addEventListener("click", () => {
       if (playlist.length === 0) return;
       
       if (!isPlaying) {
-        // Questa condizione controlla se la traccia corrente deve essere caricata nell'audioBuffer.
-        // È vera se:
-        // 1. Nessuna traccia è stata ancora selezionata/caricata (currentTrackIndex è -1 all'inizio).
-        // 2. Oppure, se audioBuffer è null (es. dopo aver svuotato la playlist o al primo caricamento).
         if (currentTrackIndex === -1 || audioBuffer === null) {
-          // Se currentTrackIndex è -1 ma ci sono tracce, impostiamo la prima traccia.
           if (currentTrackIndex === -1 && playlist.length > 0) {
             currentTrackIndex = 0;
           }
-          // Procediamo solo se currentTrackIndex è ora valido.
           if (currentTrackIndex !== -1) {
-            loadTrack(currentTrackIndex).then(() => playAudioFromPosition(0)); // Carica e riproduci dall'inizio
+            loadTrack(currentTrackIndex).then(() => {
+              playAudio();
+            });
           }
         } else {
-          // Se audioBuffer è già caricato per la traccia corrente, riproduci dalla posizione attuale.
-          playAudioFromPosition(currentPosition);
+          playAudio();
         }
       }
     });
@@ -714,8 +1224,6 @@
     stopBtn.addEventListener("click", () => {
       if (isPlaying) {
         stopPlayback();
-        seekSlider.value = 0;
-        currentPosition = 0;
       }
     });
 
@@ -754,6 +1262,47 @@
 
       const link = document.createElement("a");
       link.download = "analizzatore_audio.jpg";
+      link.href = tempCanvas.toDataURL("image/jpeg", 0.9);
+      link.click();
+    });
+    
+    saveHarmonicsBtn.addEventListener("click", () => {
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = harmonicsContainer.offsetWidth;
+      tempCanvas.height = harmonicsContainer.offsetHeight;
+      
+      const ctx = tempCanvas.getContext("2d");
+      ctx.fillStyle = "#1a1a1a";
+      ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // Aggiungi il titolo
+      ctx.fillStyle = "#0f0";
+      ctx.font = "16px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("Analizzatore di Armoniche", tempCanvas.width/2, 20);
+      
+      // Disegna ogni elemento armonico
+      const harmonicItems = harmonicsContainer.querySelectorAll('.harmonic-item');
+      let yPos = 40;
+      
+      harmonicItems.forEach(item => {
+        const label = item.querySelector('.harmonic-label');
+        const canvas = item.querySelector('.harmonic-canvas');
+        
+        // Disegna l'etichetta
+        ctx.fillStyle = "#0f0";
+        ctx.font = "12px monospace";
+        ctx.textAlign = "left";
+        ctx.fillText(label.textContent, 10, yPos);
+        
+        // Disegna il canvas della forma d'onda
+        ctx.drawImage(canvas, 10, yPos + 5);
+        
+        yPos += 50;
+      });
+      
+      const link = document.createElement("a");
+      link.download = "armoniche_audio.jpg";
       link.href = tempCanvas.toDataURL("image/jpeg", 0.9);
       link.click();
     });
@@ -820,7 +1369,14 @@
     });
 
     // Inizializzazione
+    updateFilterLabels();
     drawStaticAxes();
+    // Ridimensiona il canvas del filtro quando la finestra cambia dimensione
+    window.addEventListener('resize', () => {
+      filterCanvas.width = filterCanvas.offsetWidth;
+      filterCanvas.height = filterCanvas.offsetHeight;
+      drawFilterResponse();
+    });
   </script>
 </body>
 </html>
