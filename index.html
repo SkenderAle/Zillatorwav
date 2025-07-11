@@ -562,13 +562,19 @@
       
       filterCtx.clearRect(0, 0, width, height);
       
+      // Nuova scala dB: da -40dB a +40dB (80dB totale)
+      const minDb = -40;
+      const maxDb = 40;
+      const dbRange = maxDb - minDb;
+      
       // Griglia
       filterCtx.strokeStyle = '#0f0';
       filterCtx.lineWidth = 0.5;
       filterCtx.beginPath();
       
-      // Linee orizzontali
-      for (let y = 0; y <= height; y += height / 4) {
+      // Linee orizzontali (ogni 10dB)
+      for (let db = minDb; db <= maxDb; db += 10) {
+        const y = height * (1 - (db - minDb) / dbRange);
         filterCtx.moveTo(0, y);
         filterCtx.lineTo(width, y);
       }
@@ -593,14 +599,17 @@
       
       filterNode.getFrequencyResponse(freqData, magResponse, new Float32Array(width));
       
-      // Disegna la curva di risposta
+      // Disegna la curva di risposta (convertendo in dB)
       filterCtx.strokeStyle = '#0f0';
       filterCtx.lineWidth = 2;
       filterCtx.beginPath();
       
       for (let i = 0; i < width; i++) {
         const x = i;
-        const y = height - (magResponse[i] * height * 0.8 + height * 0.1);
+        // Converti l'ampiezza in dB (20*log10)
+        const db = 20 * Math.log10(Math.max(magResponse[i], 0.0001)); // Evita log(0)
+        // Normalizza nella nuova scala
+        const y = height * (1 - (db - minDb) / dbRange);
         
         if (i === 0) {
           filterCtx.moveTo(x, y);
@@ -676,10 +685,13 @@
         filterCtx.fillText(freq >= 1000 ? (freq/1000) + 'k' : freq, x, height - 2);
       });
       
-      // dB sull'asse Y
-      const dbLabels = ['-24dB', '-12dB', '0dB', '+12dB', '+24dB'];
+      // dB sull'asse Y (modificato per la nuova scala)
+      const dbLabels = ['-40dB', '-20dB', '0dB', '+20dB', '+40dB'];
       dbLabels.forEach((label, i) => {
-        const y = height * (0.1 + i * 0.2);
+        const db = minDb + (i * (dbRange / (dbLabels.length - 1)));
+        const y = height * (1 - (db - minDb) / dbRange);
+        filterCtx.fillStyle = '#0f0';
+        filterCtx.font = '10px monospace';
         filterCtx.textAlign = 'left';
         filterCtx.fillText(label, 5, y + 3);
       });
@@ -1268,43 +1280,64 @@
     });
     
     saveHarmonicsBtn.addEventListener("click", () => {
-      const tempCanvas = document.createElement("canvas");
-      tempCanvas.width = harmonicsContainer.offsetWidth;
-      tempCanvas.height = harmonicsContainer.offsetHeight;
+      // Crea un canvas temporaneo per l'immagine
+      const tempCanvas = document.createElement('canvas');
+      const container = document.querySelector('.right-pane');
       
-      const ctx = tempCanvas.getContext("2d");
-      ctx.fillStyle = "#1a1a1a";
+      // Imposta le dimensioni del canvas
+      tempCanvas.width = container.offsetWidth;
+      tempCanvas.height = container.offsetHeight;
+      
+      const ctx = tempCanvas.getContext('2d');
+      
+      // Disegna lo sfondo
+      ctx.fillStyle = '#1a1a1a';
       ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
       
       // Aggiungi il titolo
-      ctx.fillStyle = "#0f0";
-      ctx.font = "16px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText("Analizzatore di Armoniche", tempCanvas.width/2, 20);
+      ctx.fillStyle = '#0f0';
+      ctx.font = 'bold 16px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Analizzatore di Armoniche', tempCanvas.width / 2, 25);
       
       // Disegna ogni elemento armonico
       const harmonicItems = harmonicsContainer.querySelectorAll('.harmonic-item');
-      let yPos = 40;
+      let yPos = 50;
       
       harmonicItems.forEach(item => {
         const label = item.querySelector('.harmonic-label');
         const canvas = item.querySelector('.harmonic-canvas');
         
+        // Disegna il rettangolo di sfondo per l'elemento armonico
+        ctx.fillStyle = '#222';
+        ctx.fillRect(10, yPos - 20, tempCanvas.width - 20, 50);
+        ctx.strokeStyle = '#333';
+        ctx.strokeRect(10, yPos - 20, tempCanvas.width - 20, 50);
+        
         // Disegna l'etichetta
-        ctx.fillStyle = "#0f0";
-        ctx.font = "12px monospace";
-        ctx.textAlign = "left";
-        ctx.fillText(label.textContent, 10, yPos);
+        ctx.fillStyle = '#0f0';
+        ctx.font = '12px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(label.textContent, 15, yPos);
         
         // Disegna il canvas della forma d'onda
-        ctx.drawImage(canvas, 10, yPos + 5);
+        ctx.drawImage(canvas, 15, yPos + 10);
         
-        yPos += 50;
+        yPos += 60;
       });
       
-      const link = document.createElement("a");
-      link.download = "armoniche_audio.jpg";
-      link.href = tempCanvas.toDataURL("image/jpeg", 0.9);
+      // Aggiungi la data e ora in basso
+      const now = new Date();
+      const timestamp = now.toLocaleString('it-IT');
+      ctx.fillStyle = '#0f0';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(timestamp, tempCanvas.width - 10, tempCanvas.height - 10);
+      
+      // Crea il link per il download
+      const link = document.createElement('a');
+      link.download = 'analisi_armoniche_' + now.getTime() + '.jpg';
+      link.href = tempCanvas.toDataURL('image/jpeg', 0.9);
       link.click();
     });
     
