@@ -428,6 +428,7 @@
     let filterNode = null;
     let micSource = null;
     let micAnalyser = null;
+    let recordingActive = false;
     
     // Variabili playlist
     let playlist = [];
@@ -1307,65 +1308,108 @@
       link.click();
     });
     
-    recordVideoBtn.addEventListener("click", () => {
-       if (recordVideoBtn.textContent === "Ferma registrazione") {
-         if(mediaRecorder) mediaRecorder.stop();
-         recordVideoBtn.textContent = "Registra Video";
-         return;
-       }
-
-       const axisWidth = 65;
-       const visualizerWidth = 600;
-       const combinedWidth = axisWidth + visualizerWidth;
-       const combinedHeight = 200 + 200;
-
-       const combinedCanvas = document.createElement("canvas");
-       combinedCanvas.width = combinedWidth;
-       combinedCanvas.height = combinedHeight;
-       const combinedCtx = combinedCanvas.getContext("2d");
-
-       let rafId;
-       const stream = combinedCanvas.captureStream(30);
-       const audioDestination = audioCtx.createMediaStreamDestination();
-       analyser.connect(audioDestination);
-       
-       const combinedStream = new MediaStream([...stream.getVideoTracks(), ...audioDestination.stream.getAudioTracks()]);
-       mediaRecorder = new MediaRecorder(combinedStream, { mimeType: "video/webm; codecs=vp9,opus" });
-
-       mediaRecorder.ondataavailable = e => {
-         if (e.data.size > 0) recordedChunks.push(e.data);
-       };
-
-       mediaRecorder.onstop = () => {
-         cancelAnimationFrame(rafId);
-         analyser.disconnect(audioDestination);
-         const blob = new Blob(recordedChunks, { type: "video/webm" });
-         const url = URL.createObjectURL(blob);
-         const a = document.createElement("a");
-         a.href = url;
-         let filename = prompt("Nome file video (senza estensione):", "registrazione_audio");
-         if (!filename) filename = "registrazione_audio";
-         a.download = filename + ".webm";
-         a.click();
-         URL.revokeObjectURL(url);
-         status.textContent = "Registrazione salvata.";
-       };
-
-       recordedChunks = [];
-       mediaRecorder.start();
-       recordVideoBtn.textContent = "Ferma registrazione";
-       status.textContent = "Registrazione avviata...";
-
-       function drawCombined() {
-         combinedCtx.fillStyle = "#111";
-         combinedCtx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
-         combinedCtx.drawImage(waveformYAxis, 0, 0);
-         combinedCtx.drawImage(oscilloscope, axisWidth, 0);
-         combinedCtx.drawImage(spectrogramYAxis, 0, 200);
-         combinedCtx.drawImage(spectrogram, axisWidth, 200);
-         rafId = requestAnimationFrame(drawCombined);
-       }
-       drawCombined();
+    recordVideoBtn.addEventListener("click", async () => {
+      if (recordingActive) {
+        // Ferma la registrazione
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+        }
+        recordVideoBtn.textContent = "Registra Video";
+        recordingActive = false;
+        return;
+      }
+      
+      // Avvia la registrazione
+      try {
+        recordingActive = true;
+        recordVideoBtn.textContent = "Ferma registrazione";
+        status.textContent = "Preparazione registrazione...";
+        
+        // Crea un canvas combinato per la registrazione
+        const combinedCanvas = document.createElement('canvas');
+        const axisWidth = 65;
+        const visualizerWidth = 600;
+        combinedCanvas.width = axisWidth + visualizerWidth;
+        combinedCanvas.height = oscilloscope.height + spectrogram.height;
+        const combinedCtx = combinedCanvas.getContext('2d');
+        
+        // Crea uno stream video dal canvas
+        const videoStream = combinedCanvas.captureStream(30);
+        
+        // Crea uno stream audio dall'analizzatore
+        const audioDestination = audioCtx.createMediaStreamDestination();
+        analyser.connect(audioDestination);
+        
+        // Combina gli stream video e audio
+        const combinedStream = new MediaStream([
+          ...videoStream.getVideoTracks(),
+          ...audioDestination.stream.getAudioTracks()
+        ]);
+        
+        // Opzioni per il MediaRecorder
+        const options = { mimeType: 'video/webm;codecs=vp9,opus' };
+        
+        // Crea il MediaRecorder
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(combinedStream, options);
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+        
+        mediaRecorder.onstop = () => {
+          // Crea il blob e il download
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = 'registrazione_audio.webm';
+          document.body.appendChild(a);
+          a.click();
+          
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 100);
+          
+          status.textContent = "Registrazione completata e salvata";
+        };
+        
+        // Avvia la registrazione
+        mediaRecorder.start(100); // Raccolta dati ogni 100ms
+        
+        // Funzione per disegnare sul canvas combinato
+        function drawCombined() {
+          if (!recordingActive) return;
+          
+          // Disegna lo sfondo
+          combinedCtx.fillStyle = '#111';
+          combinedCtx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+          
+          // Disegna gli elementi
+          combinedCtx.drawImage(waveformYAxis, 0, 0);
+          combinedCtx.drawImage(oscilloscope, axisWidth, 0);
+          combinedCtx.drawImage(spectrogramYAxis, 0, oscilloscope.height);
+          combinedCtx.drawImage(spectrogram, axisWidth, oscilloscope.height);
+          
+          // Continua a disegnare
+          requestAnimationFrame(drawCombined);
+        }
+        
+        // Avvia il disegno
+        drawCombined();
+        status.textContent = "Registrazione in corso...";
+        
+      } catch (err) {
+        console.error("Errore durante la registrazione:", err);
+        status.textContent = "Errore durante la registrazione: " + err.message;
+        recordingActive = false;
+        recordVideoBtn.textContent = "Registra Video";
+      }
     });
 
     // Inizializzazione
