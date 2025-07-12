@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spettrogramma Colorato con Controlli</title>
+<style>
+  body { margin: 0; background: black; color: white; font-family: sans-serif; }
+  #controls {
+    position: fixed;
+    top: 10px; left: 10px; right: 10px;
+    background: rgba(0,0,0,0.7);
+    padding: 10px;
+    border-radius: 8px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    z-index: 10;
+  }
+  canvas { display: block; background: black; margin-top: 80px; }
+  input[type=range] { width: 100px; }
+  button { cursor: pointer; }
+
+  .tiny-slider {
+    width: 80px;
+    height: 12px;
+  }
+  
+  #recordingTimer {
+    display: none;
+    position: fixed;
+    top: 60px;
+    left: 10px;
+    background: rgba(255,0,0,0.7);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <button id="micToggle">Accendi Microfono</button>
+  
+  <input type="file" id="audioFile" accept="audio/*" />
+  <button id="playAudio" disabled>Play</button>
+  <button id="pauseAudio" disabled>Pausa</button>
+  <button id="stopAudio" disabled>Stop</button>
+  <input type="range" id="seekSlider" min="0" max="100" value="0" disabled />
+  
+  <button id="saveJPG">Salva JPG</button>
+  <button id="captureWindow">Cattura Finestra</button>
+
+  <label style="font-size: 12px;">
+   minDbThreshold
+   <input type="range" id="minDbSlider" class="tiny-slider" min="-22" max="-2" value="-12" step="0.1" />
+  </label>
+  <label style="font-size: 12px;">
+   maxDbThreshold
+   <input type="range" id="maxDbSlider" class="tiny-slider" min="-2" max="18" value="8" step="0.1" />
+  </label>
+</div>
+
+<div id="recordingTimer">00:00</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+(() => {
+  // Configurazione iniziale
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight - 80;
+  
+  // Elementi UI
+  const micToggle = document.getElementById("micToggle");
+  const audioFileInput = document.getElementById("audioFile");
+  const playAudioBtn = document.getElementById("playAudio");
+  const pauseAudioBtn = document.getElementById("pauseAudio");
+  const stopAudioBtn = document.getElementById("stopAudio");
+  const seekSlider = document.getElementById("seekSlider");
+  const saveJPGBtn = document.getElementById("saveJPG");
+  const captureWindowBtn = document.getElementById("captureWindow");
+  const recordingTimer = document.getElementById("recordingTimer");
+  const minDbSlider = document.getElementById("minDbSlider");
+  const maxDbSlider = document.getElementById("maxDbSlider");
+
+  // Variabili stato
+  let audioCtx, analyser, sourceNode, micStream;
+  let animationId, drawing = false;
+  let audioElement = null, audioSourceNode = null;
+  let audioPlaying = false, seekUpdating = false;
+  let isRecording = false, currentAudioSource = null;
+  let mediaRecorder = null, recordedChunks = [];
+  let minDbThreshold = -12, maxDbThreshold = 8;
+  let screenStream = null;
+  let audioDest = null; // Aggiunto per la destinazione audio della registrazione
+
+  // Configurazione spettrogramma
+  const fftSize = 2048;
+  const sampleRate = 44100;
+  const minFreq = 50, maxFreq = 16000, baseFreq = 409;
+
+  // Funzioni di supporto
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight - 80;
+  }
+
+  function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+  }
+
+  // Funzioni spettrogramma (rimangono identiche)
+  function yLogScale(freq) {
+    const logMin = Math.log(minFreq);
+    const logMax = Math.log(maxFreq);
+    const logF = Math.log(freq);
+    return canvas.height - ((logF - logMin) / (logMax - logMin) * canvas.height);
+  }
+
+  function freqToColor(freq, amp = 1) {
+    let ratio = Math.log2(freq / baseFreq);
+    ratio = ratio - Math.floor(ratio);
+    const hue = ratio * 270;
+    const lightness = 50 + amp * 20;
+    return `hsl(${hue}, 100%, ${lightness}%)`;
+  }
+
+  function threshold(freq) {
+    const logMin = Math.log(minFreq);
+    const logMax = Math.log(maxFreq);
+    const logF = Math.log(freq);
+    const t = (logMax - logF) / (logMax - logMin);
+    return minDbThreshold + t * (maxDbThreshold - minDbThreshold);
+  }
+
+  function scrollCanvas() {
+    const imageData = ctx.getImageData(1, 0, canvas.width - 1, canvas.height);
+    ctx.putImageData(imageData, 0, 0);
+    ctx.clearRect(canvas.width - 1, 0, 1, canvas.height);
+  }
+
+  function drawFrequencyData(data) {
+    scrollCanvas();
+    const x = canvas.width - 1;
+    for (let i = 0; i < data.length; i++) {
+      const freq = i * sampleRate / fftSize;
+      if (freq < minFreq || freq > maxFreq) continue;
+
+      const y = yLogScale(freq);
+      const amp = data[i] / 255;
+      if (amp <= 0) continue;
+
+      const db = 20 * Math.log10(amp);
+      const thr = threshold(freq);
+      if (db < thr) continue;
+
+      const intensity = (db - thr) / (0 - thr);
+      ctx.fillStyle = freqToColor(freq);
+      ctx.globalAlpha = intensity;
+      ctx.fillRect(x, y, 1, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Gestione audio (modificata per supportare la registrazione)
+  async function startMic() {
+    if (audioPlaying) stopAudio();
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      sourceNode = audioCtx.createMediaStreamSource(micStream);
+      
+      if (analyser) analyser.disconnect();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = fftSize;
+      
+      sourceNode.connect(analyser);
+      
+      // Se stiamo registrando, connetti anche alla destinazione di registrazione
+      if (isRecording && audioDest) {
+        sourceNode.connect(audioDest);
+      }
+      
+      drawing = true;
+      currentAudioSource = 'microphone';
+      drawMic();
+      return true;
+    } catch (err) {
+      console.error("Errore microfono:", err);
+      return false;
+    }
+  }
+
+  function stopMic() {
+    if (micStream) {
+      micStream.getTracks().forEach(track => track.stop());
+      micStream = null;
+    }
+    if (sourceNode) {
+      sourceNode.disconnect();
+      sourceNode = null;
+    }
+    drawing = false;
+    currentAudioSource = null;
+    
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  function drawMic() {
+    if (!drawing || currentAudioSource !== 'microphone') return;
+    animationId = requestAnimationFrame(drawMic);
+    
+    if (!analyser) return;
+    const bufferLength = analyser.frequencyBinCount;
+    const data = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(data);
+    drawFrequencyData(data);
+  }
+
+  function setupAudioElement(file) {
+    if (audioElement) {
+      audioElement.pause();
+      audioElement.removeEventListener("ended", handleAudioEnded);
+      audioElement.removeEventListener("timeupdate", handleTimeUpdate);
+      audioElement.src = "";
+      audioElement = null;
+    }
+    
+    audioElement = new Audio();
+    audioElement.src = URL.createObjectURL(file);
+    audioElement.crossOrigin = "anonymous";
+    audioElement.preload = "auto";
+    audioElement.controls = false;
+
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    if (audioSourceNode) audioSourceNode.disconnect();
+    if (analyser) analyser.disconnect();
+    
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = fftSize;
+    
+    audioSourceNode = audioCtx.createMediaElementSource(audioElement);
+    audioSourceNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+
+    // Se stiamo registrando, connetti anche alla destinazione di registrazione
+    if (isRecording && audioDest) {
+      audioSourceNode.connect(audioDest);
+    }
+
+    audioElement.addEventListener("ended", handleAudioEnded);
+    audioElement.addEventListener("timeupdate", handleTimeUpdate);
+    
+    updateAudioControls();
+  }
+
+  function handleAudioEnded() {
+    audioPlaying = false;
+    currentAudioSource = null;
+    updateAudioControls();
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  function handleTimeUpdate() {
+    if (!seekUpdating && audioElement.duration) {
+      const posPercent = (audioElement.currentTime / audioElement.duration) * 100;
+      seekSlider.value = posPercent;
+    }
+  }
+
+  function playAudio() {
+    if (!audioElement) return;
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    audioCtx.resume().then(() => {
+      audioElement.play();
+      audioPlaying = true;
+      currentAudioSource = 'playback';
+      updateAudioControls();
+      
+      if (animationId) cancelAnimationFrame(animationId);
+      drawAudio();
+    });
+  }
+
+  function pauseAudio() {
+    if (!audioElement) return;
+    audioElement.pause();
+    audioPlaying = false;
+    updateAudioControls();
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  function stopAudio() {
+    if (!audioElement) return;
+    audioElement.pause();
+    audioElement.currentTime = 0;
+    audioPlaying = false;
+    currentAudioSource = null;
+    updateAudioControls();
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  function updateAudioControls() {
+    playAudioBtn.disabled = !audioElement || audioPlaying;
+    pauseAudioBtn.disabled = !audioElement || !audioPlaying;
+    stopAudioBtn.disabled = !audioElement;
+    seekSlider.disabled = !audioElement;
+  }
+
+  function drawAudio() {
+    if (!audioPlaying || currentAudioSource !== 'playback') return;
+    
+    animationId = requestAnimationFrame(drawAudio);
+    if (!analyser) return;
+    
+    const bufferLength = analyser.frequencyBinCount;
+    const data = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(data);
+    drawFrequencyData(data);
+  }
+
+  // Cattura schermo con audio - VERSIONE FINALE MIGLIORATA
+  async function startScreenCapture() {
+    if (isRecording) {
+      stopScreenCapture();
+      return;
+    }
+
+    try {
+      isRecording = true;
+      recordedChunks = [];
+      captureWindowBtn.textContent = "Ferma Cattura";
+      recordingTimer.style.display = 'block';
+
+      // 1. Cattura solo il video dello schermo
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          displaySurface: 'window',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      });
+
+      // 2. Crea un contesto audio se non esiste
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      // 3. Prepara la destinazione per l'audio della registrazione
+      audioDest = audioCtx.createMediaStreamDestination();
+
+      // 4. Se c'è una sorgente audio attiva, connettila alla registrazione
+      if (currentAudioSource === 'microphone' && sourceNode) {
+        sourceNode.connect(audioDest);
+      } else if (currentAudioSource === 'playback' && audioSourceNode) {
+        audioSourceNode.connect(audioDest);
+      }
+      // Se non c'è audio attivo, la registrazione partirà comunque senza audio
+
+      // 5. Crea uno stream per il canvas
+      const canvasStream = canvas.captureStream(30);
+      
+      // 6. Combina gli stream:
+      const combinedStream = new MediaStream();
+      
+      // Aggiungi il video dello schermo
+      screenStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
+      
+      // Aggiungi l'audio se disponibile
+      if (audioDest) {
+        audioDest.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+      }
+
+      // 7. Configura il MediaRecorder
+      mediaRecorder = new MediaRecorder(combinedStream, {
+        mimeType: 'video/webm;codecs=vp9,opus',
+        videoBitsPerSecond: 5000000
+      });
+
+      // Timer di registrazione
+      let recordingStart = Date.now();
+      let timerInterval = setInterval(() => {
+        const seconds = Math.floor((Date.now() - recordingStart) / 1000);
+        recordingTimer.textContent = formatTime(seconds);
+      }, 1000);
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordedChunks.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        clearInterval(timerInterval);
+        recordingTimer.style.display = 'none';
+        isRecording = false;
+        captureWindowBtn.textContent = "Cattura Finestra";
+        
+        // Disconnetti la destinazione audio
+        if (audioDest) {
+          if (sourceNode) sourceNode.disconnect(audioDest);
+          if (audioSourceNode) audioSourceNode.disconnect(audioDest);
+          audioDest = null;
+        }
+        
+        if (recordedChunks.length > 0) {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `spettrogramma-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 100);
+        }
+
+        // Chiudi gli stream
+        if (screenStream) {
+          screenStream.getTracks().forEach(track => track.stop());
+          screenStream = null;
+        }
+      };
+
+      // Inizia la registrazione
+      mediaRecorder.start(1000);
+
+      // Interrompi se l'utente smette di condividere lo schermo
+      screenStream.getVideoTracks()[0].addEventListener('ended', () => {
+        stopScreenCapture();
+      });
+
+    } catch (err) {
+      console.error("Errore cattura schermo:", err);
+      stopScreenCapture();
+      if (err.name !== 'NotAllowedError') {
+        alert(`Errore: ${err.message}`);
+      }
+    }
+  }
+
+  function stopScreenCapture() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
+    if (screenStream) {
+      screenStream.getTracks().forEach(track => track.stop());
+      screenStream = null;
+    }
+    isRecording = false;
+    recordingTimer.style.display = 'none';
+    captureWindowBtn.textContent = "Cattura Finestra";
+    captureWindowBtn.disabled = false;
+  }
+
+  // Event listeners (rimangono identici)
+  window.addEventListener("resize", resizeCanvas);
+  minDbSlider.addEventListener("input", () => minDbThreshold = parseFloat(minDbSlider.value));
+  maxDbSlider.addEventListener("input", () => maxDbThreshold = parseFloat(maxDbSlider.value));
+  seekSlider.addEventListener("input", () => {
+    if (!audioElement) return;
+    seekUpdating = true;
+    if (audioElement.duration) {
+      audioElement.currentTime = (seekSlider.value / 100) * audioElement.duration;
+    }
+  });
+  seekSlider.addEventListener("change", () => seekUpdating = false);
+
+  let micOn = false;
+  micToggle.addEventListener("click", async () => {
+    if (micOn) {
+      stopMic();
+      micToggle.textContent = "Accendi Microfono";
+      micOn = false;
+    } else {
+      if (audioPlaying) stopAudio();
+      const success = await startMic();
+      if (success) {
+        micToggle.textContent = "Spegni Microfono";
+        micOn = true;
+      }
+    }
+  });
+
+  audioFileInput.addEventListener("change", e => {
+    if (e.target.files.length === 0) return;
+    if (micOn) {
+      stopMic();
+      micToggle.textContent = "Accendi Microfono";
+      micOn = false;
+    }
+    setupAudioElement(e.target.files[0]);
+  });
+
+  playAudioBtn.addEventListener("click", playAudio);
+  pauseAudioBtn.addEventListener("click", pauseAudio);
+  stopAudioBtn.addEventListener("click", stopAudio);
+
+  saveJPGBtn.addEventListener("click", () => {
+    const dataURL = canvas.toDataURL("image/jpeg", 0.95);
+    const a = document.createElement("a");
+    a.href = dataURL;
+    a.download = "spettrogramma.jpg";
+    a.click();
+  });
+
+  captureWindowBtn.addEventListener("click", startScreenCapture);
+
+  window.addEventListener("beforeunload", () => {
+    stopMic();
+    if (audioElement) audioElement.pause();
+    if (isRecording) stopScreenCapture();
+  });
+
+  // Inizializzazione
+  resizeCanvas();
+})();
+</script>
+
+</body>
+</html>
