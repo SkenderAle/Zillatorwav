@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Formant Oscillator Bank</title>
-    <subtitle> <a href="mailto:alessandro.zilli@gmail.com" > mailto Alessandro Zilli </a></subtitle>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -65,6 +64,7 @@
         }
         canvas {
             width: 100%;
+            background-color: #111;
         }
         #spectrumCanvas {
             height: 200px;
@@ -119,6 +119,20 @@
         input[type="range"] {
             width: 80px;
         }
+        input[type="range"].linear-slider {
+            -webkit-appearance: none;
+            height: 6px;
+            background: #444;
+            border-radius: 3px;
+        }
+        input[type="range"].linear-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #44aa44;
+            border-radius: 50%;
+            cursor: pointer;
+        }
         input[type="number"] {
             width: 60px;
             padding: 3px;
@@ -170,8 +184,37 @@
             justify-content: space-between;
             font-size: 12px;
         }
+        .amplitude-labels {
+            position: absolute;
+            left: 10px;
+            top: 0;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 12px;
+        }
         .spectrum-container {
             position: relative;
+        }
+        .waveform-container {
+            position: relative;
+        }
+        .db-value {
+            min-width: 50px;
+            display: inline-block;
+            text-align: center;
+            font-size: 12px;
+        }
+        .clipping-info {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            color: red;
+            font-size: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 2px 5px;
+            border-radius: 3px;
         }
     </style>
 </head>
@@ -186,15 +229,16 @@
                 <div class="control-group">
                     <label>Base Freq (Hz):</label>
                     <input type="number" id="baseFreq" value="220" step="1" min="20" max="2000">
-                    <button id="setAll" class="master-btn">Set Non-Linear</button>
-                    <button id="setHarmonic" class="harmonic-btn">Set Harm</button>
+                    <button id="setAll" class="master-btn">Set All (Non-Linear)</button>
+                    <button id="setHarmonic" class="harmonic-btn">Set Harmonic</button>
                     <button id="toggleAudio">Freeze</button>
                     <button id="playAll" class="master-btn">Play All</button>
                     <button id="stopAll" class="master-btn">Off All</button>
                 </div>
                 <div class="control-group volume-controls">
                     <span class="volume-label">Volume:</span>
-                    <input type="range" id="masterVolume" class="master-volume-slider" min="0" max="1" step="0.01" value="0.5">
+                    <input type="range" id="masterVolume" class="master-volume-slider linear-slider" min="-40" max="0" step="0.1" value="-6">
+                    <span class="db-value">-6 dB</span>
                 </div>
                 <div class="control-group">
                     <button id="recBtn" class="rec-btn">REC</button>
@@ -206,6 +250,7 @@
             <div class="result-graphs">
                 <div class="spectrum-container">
                     <div class="db-labels">
+                        <span>+20 dB</span>
                         <span>0 dB</span>
                         <span>-20 dB</span>
                         <span>-40 dB</span>
@@ -215,7 +260,17 @@
                     <canvas id="spectrumCanvas"></canvas>
                 </div>
                 <div class="frequency-labels" id="frequencyLabels"></div>
-                <canvas id="waveformCanvas"></canvas>
+                <div class="waveform-container">
+                    <div class="amplitude-labels">
+                        <span>+2.0</span>
+                        <span>+1.0</span>
+                        <span>0.0</span>
+                        <span>-1.0</span>
+                        <span>-2.0</span>
+                    </div>
+                    <canvas id="waveformCanvas"></canvas>
+                    <div class="clipping-info" id="clippingInfo"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -259,7 +314,9 @@
         const playAllBtn = document.getElementById('playAll');
         const stopAllBtn = document.getElementById('stopAll');
         const masterVolumeSlider = document.getElementById('masterVolume');
+        const masterDbValue = document.querySelector('.volume-controls .db-value');
         const frequencyLabels = document.getElementById('frequencyLabels');
+        const clippingInfo = document.getElementById('clippingInfo');
         
         // Function to calculate waveform duration based on base frequency
         function getWaveformDurationMs() {
@@ -298,7 +355,7 @@
         function initAudio() {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             masterGain = audioContext.createGain();
-            masterGain.gain.value = 0.5;
+            masterGain.gain.value = Math.pow(10, -6/20); // -6 dB
             masterGain.connect(audioContext.destination);
             
             // Spectrum analyser
@@ -332,7 +389,8 @@
                 <div class="formant-controls">
                     <span>F${index+1}:</span>
                     <input type="number" class="freq-input" value="${freq.toFixed(1)}" step="0.1">
-                    <input type="range" class="volume-slider" min="0" max="1" step="0.01" value="0.5">
+                    <input type="range" class="volume-slider linear-slider" min="-40" max="0" step="0.1" value="-6">
+                    <span class="db-value">-6 dB</span>
                     <button class="play-btn">Play</button>
                     <button class="phase-btn">±</button>
                     <label><input type="checkbox" class="mute-check"> M</label>
@@ -348,7 +406,7 @@
                 gain: audioContext.createGain(),
                 playing: false,
                 frequency: freq,
-                amplitude: 0.5,
+                amplitude: Math.pow(10, -6/20), // -6 dB in linear scale
                 phaseInverted: false,
                 muted: false,
                 canvas: oscillatorDiv.querySelector('.formant-wave'),
@@ -356,7 +414,8 @@
                 freqInput: oscillatorDiv.querySelector('.freq-input'),
                 volumeSlider: oscillatorDiv.querySelector('.volume-slider'),
                 phaseButton: oscillatorDiv.querySelector('.phase-btn'),
-                muteCheck: oscillatorDiv.querySelector('.mute-check')
+                muteCheck: oscillatorDiv.querySelector('.mute-check'),
+                dbValueElement: oscillatorDiv.querySelector('.db-value')
             };
             
             // Setup canvas
@@ -383,9 +442,14 @@
             });
             
             osc.volumeSlider.addEventListener('input', () => {
-                osc.amplitude = parseFloat(osc.volumeSlider.value);
+                const dbValue = parseFloat(osc.volumeSlider.value);
+                osc.dbValueElement.textContent = dbValue.toFixed(1) + " dB";
+                
+                // Convert dB to linear amplitude (10^(dB/20))
+                osc.amplitude = dbValue === -40 ? 0 : Math.pow(10, dbValue/20);
+                
                 if (osc.playing) {
-                    osc.gain.gain.value = osc.amplitude;
+                    osc.gain.gain.value = osc.muted ? 0 : osc.amplitude;
                 }
                 drawOscillatorWaveform(osc);
             });
@@ -471,6 +535,8 @@
             
             const durationSec = WAVEFORM_DURATION_MS / 1000;
             const freq = parseFloat(osc.freqInput.value) || 1;
+            const dbValue = parseFloat(osc.volumeSlider.value);
+            const displayAmplitude = dbValue === -40 ? 0 : (dbValue + 40) / 40; // Normalize to 0-1
             
             for (let i = 0; i <= width; i++) {
                 const x = i;
@@ -481,7 +547,7 @@
                     y = -y;
                 }
                 
-                y *= osc.amplitude;
+                y *= displayAmplitude;
                 
                 const pixelY = (1 - (y * 0.5 + 0.5)) * height;
                 
@@ -530,17 +596,18 @@
                 spectrumCtx.lineTo(x, height);
             });
             
-            // Horizontal grid lines (dB)
-            const dbSteps = [-20, -40, -60, -80];
+            // Horizontal grid lines (dB) - now from -80 to +20
+            const DB_RANGE = 100; // 80 + 20
+            const dbSteps = [-80, -60, -40, -20, 0, 20];
             dbSteps.forEach(db => {
-                const y = height * (1 - (db + 80) / 80);
+                const y = height * (1 - (db + 80) / DB_RANGE);
                 spectrumCtx.moveTo(0, y);
                 spectrumCtx.lineTo(width, y);
             });
             
             spectrumCtx.stroke();
             
-            // Draw spectrum
+            // Draw spectrum with new dB range
             spectrumCtx.lineWidth = 2;
             spectrumCtx.strokeStyle = 'rgb(0, 200, 255)';
             spectrumCtx.beginPath();
@@ -552,8 +619,8 @@
                 if (freq > MAX_FREQ) break;
                 
                 const x = freqToX(freq, width);
-                const db = dataArray[i] / 255 * 80 - 80; // Convert to dB scale (0 = -80dB, 255 = 0dB)
-                const y = height * (1 - (db + 80) / 80);
+                const db = dataArray[i] / 255 * DB_RANGE - 80; // Now scales to -80dB to +20dB
+                const y = height * (1 - (db + 80) / DB_RANGE);
                 
                 if (firstPoint) {
                     spectrumCtx.moveTo(x, y);
@@ -599,7 +666,7 @@
             waveformCtx.fillStyle = 'rgb(20, 20, 20)';
             waveformCtx.fillRect(0, 0, width, height);
             
-            // Draw grid
+            // Draw grid (-2 to +2 reference)
             waveformCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             waveformCtx.beginPath();
             
@@ -610,27 +677,35 @@
                 waveformCtx.lineTo(x, height);
             }
             
-            // Horizontal grid lines (amplitude)
-            for (let i = 0; i <= 1; i += 0.5) {
-                const y = height * i;
+            // Horizontal grid lines (amplitude -2 to +2)
+            for (let i = -2; i <= 2; i += 0.5) {
+                const y = height * (0.5 - i/4);
                 waveformCtx.moveTo(0, y);
                 waveformCtx.lineTo(width, y);
             }
-            
             waveformCtx.stroke();
-            
-            // Draw waveform
+
+            // Draw waveform with true amplitude
             waveformCtx.lineWidth = 2;
             waveformCtx.strokeStyle = 'rgb(0, 255, 0)';
             waveformCtx.beginPath();
             
             const sliceWidth = width / bufferLength;
             let x = 0;
-            
+            let isClipping = false;
+            let maxAmplitude = 0;
+
             for (let i = 0; i < bufferLength; i++) {
-                const v = dataArray[i] / 128.0;
-                const y = v * height / 2;
+                // Convert to -2/+2 range
+                const v = ((dataArray[i] / 128.0) - 1) * 2;
+                const y = height * (0.5 - v/4);
                 
+                // Track maximum amplitude
+                maxAmplitude = Math.max(maxAmplitude, Math.abs(v));
+                if (maxAmplitude > 2.0) {
+                    isClipping = true;
+                }
+
                 if (i === 0) {
                     waveformCtx.moveTo(x, y);
                 } else {
@@ -640,8 +715,21 @@
                 x += sliceWidth;
             }
             
-            waveformCtx.lineTo(width, height / 2);
             waveformCtx.stroke();
+
+            // Show clipping if beyond ±2
+            if (isClipping) {
+                waveformCtx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+                waveformCtx.fillRect(0, 0, width, height);
+                
+                // Calculate how much we're clipping in dB
+                const over = (maxAmplitude - 2.0) / 2.0;
+                const dB = 20 * Math.log10(1 + over);
+                clippingInfo.textContent = `CLIPPING: +${dB.toFixed(1)} dB`;
+                clippingInfo.style.display = 'block';
+            } else {
+                clippingInfo.style.display = 'none';
+            }
         }
         
         // Update visualization
@@ -658,7 +746,7 @@
             const baseFreq = parseFloat(baseFreqInput.value);
             
             oscillators.forEach((osc, index) => {
-                const freq = baseFreq * (index + 1); // Moltiplicatore armonico
+                const freq = baseFreq * (index + 1);
                 osc.freqInput.value = freq.toFixed(1);
                 osc.frequency = freq;
                 
@@ -726,7 +814,7 @@
                     waveformAnalyser.disconnect(audioDest);
                 };
                 
-                screenRecorder.start(100); // Collect data every 100ms
+                screenRecorder.start(100);
                 screenRecBtn.textContent = 'Stop Screen Rec';
                 screenRecordingStartTime = Date.now();
                 
@@ -858,7 +946,9 @@
         
         // Update master volume
         function updateMasterVolume(value) {
-            masterGain.gain.value = value;
+            const dbValue = parseFloat(value);
+            masterDbValue.textContent = dbValue.toFixed(1) + " dB";
+            masterGain.gain.value = dbValue === -40 ? 0 : Math.pow(10, dbValue/20);
         }
         
         // Event listeners
@@ -866,7 +956,7 @@
             const baseFreq = parseFloat(baseFreqInput.value);
             
             oscillators.forEach((osc, index) => {
-                const freq = baseFreq * (1 + Math.pow(index/10, 2)); // Non-linear distribution
+                const freq = baseFreq * (1 + Math.pow(index/10, 2));
                 osc.freqInput.value = freq.toFixed(1);
                 osc.frequency = freq;
                 
@@ -892,7 +982,7 @@
                 audioContext.resume();
             }
             
-            masterGain.gain.value = audioOn ? 0.5 : 0;
+            masterGain.gain.value = audioOn ? Math.pow(10, -6/20) : 0;
         });
         
         recBtn.addEventListener('click', () => {
@@ -915,7 +1005,7 @@
         stopAllBtn.addEventListener('click', stopAll);
         
         masterVolumeSlider.addEventListener('input', () => {
-            updateMasterVolume(parseFloat(masterVolumeSlider.value));
+            updateMasterVolume(masterVolumeSlider.value);
         });
         
         // Initialize on first interaction
