@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -92,6 +92,11 @@
             border-radius: 3px;
             cursor: pointer;
         }
+        button:disabled {
+            background-color: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
         .rec-btn {
             background-color: #ff4444;
             color: white;
@@ -116,7 +121,7 @@
             background-color: #aa44aa;
             color: white;
         }
-        .android-rec-btn {
+        .canvas-rec-btn {
             background-color: #44aaaa;
             color: white;
         }
@@ -224,7 +229,7 @@
 <body>
     <div class="app-container">
         <div class="formants-container" id="oscillatorsContainer">
-            <!-- Formants will be added here dynamically -->
+            <!-- I formant verranno aggiunti qui dinamicamente -->
         </div>
         
         <div class="result-container">
@@ -232,27 +237,27 @@
                 <div class="control-group">
                     <label>Base Freq (Hz):</label>
                     <input type="number" id="baseFreq" value="220" step="1" min="20" max="2000">
-                    <button id="setAll" class="master-btn" title="Set all Non-Linear Frequencies">SetNL</button>
-                    <button id="setHarmonic" class="harmonic-btn" title="Set harmonic frequencies">Harmonic</button>
-                    <button id="playAll" class="master-btn" title="Play the first nine sinusoidal components">Play 9</button>
-                    <button id="playAllOscillators" class="master-btn" title="Play all oscillators">Play All</button>
-                    <button id="stopAll" class="master-btn">Off All</button>
+                    <button id="setAll" class="master-btn" title="Set all Non-Linear Frequencies" disabled>SetNL</button>
+                    <button id="setHarmonic" class="harmonic-btn" title="Set harmonic frequencies" disabled>Harmonic</button>
+                    <button id="playAll" class="master-btn" title="Play the first nine sinusoidal components" disabled>Play 9</button>
+                    <button id="playAllOscillators" class="master-btn" title="Play all oscillators" disabled>Play All</button>
+                    <button id="stopAll" class="master-btn" disabled>Off All</button>
                 </div>
                 <div class="control-group">
-                    <button id="toggleAudio">Freeze</button>
-                    <button id="freezeImg" title="Freeze only the canvas images">Freeze img</button>
-                    <button id="saveImg" title="Export jpg with waveform graphic">Save jpg</button>
-                    <button id="androidRecBtn" class="android-rec-btn" title="Record canvas for Android">Record Canvas</button>
+                    <button id="toggleAudio" disabled>Freeze</button>
+                    <button id="freezeImg" title="Freeze only the canvas images" disabled>Freeze img</button>
+                    <button id="saveImg" title="Export jpg with waveform graphic" disabled>Save jpg</button>
                 </div>
                 <div class="control-group volume-controls">
                     <span class="volume-label">Volume:</span>
-                    <input type="range" id="masterVolume" class="master-volume-slider linear-slider" min="-40" max="0" step="0.1" value="-6">
+                    <input type="range" id="masterVolume" class="master-volume-slider linear-slider" min="-40" max="0" step="0.1" value="-6" disabled>
                     <span class="db-value">-6 dB</span>
                 </div>
                 <div class="control-group">
-                    <button id="recBtn" class="rec-btn">REC</button>
+                    <button id="recBtn" class="rec-btn" disabled>REC</button>
                     <span class="time-display" id="recTime">00:00</span>
-                    <button id="screenRecBtn" class="screen-rec-btn">Record Screen</button>
+                    <button id="screenRecBtn" class="screen-rec-btn" disabled>Record Screen</button>
+                    <button id="canvasRecBtn" class="canvas-rec-btn" title="Record canvas to video" disabled>Record Canvas</button>
                 </div>
             </div>
             
@@ -285,14 +290,14 @@
     </div>
 
     <script>
-        // Constants
+        // Costanti
         const SAMPLE_RATE = 44100;
         const MAX_RECORD_SECONDS = 120;
         const OSCILLATOR_COUNT = 80;
         const MIN_FREQ = 30;
         const MAX_FREQ = 20000;
         
-        // Audio context
+        // Contesto audio
         let audioContext;
         let masterGain;
         let analyser;
@@ -304,30 +309,30 @@
         let recordingNodes = [];
         let recordingStartTime;
         
-        // Screen recording variables
+        // Variabili per la registrazione dello schermo
         let screenRecorder;
         let screenRecordingChunks = [];
         let screenRecordingStartTime;
         
-        // Canvas recording variables
-        let canvasRecorder;
-        let canvasRecordingInterval;
-        let canvasRecordingChunks = [];
+        // Variabili per la registrazione del canvas in video
+        let canvasVideoRecorder;
+        let canvasVideoChunks = [];
+        let canvasVideoAnimationRequest;
         let canvasRecordingStartTime;
         
-        // Visualization freeze variables
+        // Variabili per il congelamento della visualizzazione
         let isVisualizationFrozen = false;
         let frozenSpectrumImage = null;
         let frozenWaveformImage = null;
         
-        // DOM elements
+        // Elementi DOM
         const baseFreqInput = document.getElementById('baseFreq');
         const setAllBtn = document.getElementById('setAll');
         const setHarmonicBtn = document.getElementById('setHarmonic');
         const toggleAudioBtn = document.getElementById('toggleAudio');
         const recBtn = document.getElementById('recBtn');
         const screenRecBtn = document.getElementById('screenRecBtn');
-        const androidRecBtn = document.getElementById('androidRecBtn');
+        const canvasRecBtn = document.getElementById('canvasRecBtn');
         const recTimeDisplay = document.getElementById('recTime');
         const oscillatorsContainer = document.getElementById('oscillatorsContainer');
         const spectrumCanvas = document.getElementById('spectrumCanvas');
@@ -342,19 +347,13 @@
         const freezeImgBtn = document.getElementById('freezeImg');
         const saveImgBtn = document.getElementById('saveImg');
         
-        // Detect Android device
-        const isAndroid = /Android/i.test(navigator.userAgent);
-        if (!isAndroid) {
-            androidRecBtn.style.display = 'none';
-        }
-        
-        // Function to calculate waveform duration based on base frequency
+        // Funzione per calcolare la durata della forma d'onda in base alla frequenza di base
         function getWaveformDurationMs() {
             const baseFreq = parseFloat(baseFreqInput.value) || 220;
             return 1000 / baseFreq;
         }
         
-        // Convert frequency to x coordinate (logarithmic scale)
+        // Converte la frequenza in coordinata x (scala logaritmica)
         function freqToX(freq, width) {
             const minLog = Math.log10(MIN_FREQ);
             const maxLog = Math.log10(MAX_FREQ);
@@ -362,16 +361,15 @@
             return ((logFreq - minLog) / (maxLog - minLog)) * width;
         }
         
-        // Canvas setup with only 3 labels: 30Hz, 800Hz, 20kHz
+        // Impostazione dei canvas
         function setupCanvases() {
             spectrumCanvas.width = spectrumCanvas.offsetWidth * 2;
             spectrumCanvas.height = 200;
             waveformCanvas.width = waveformCanvas.offsetWidth * 2;
             waveformCanvas.height = 200;
             
-            // Setup only 3 frequency labels
             frequencyLabelsContainer.innerHTML = '';
-            const freqSteps = [30, 500, 1000, 2000, 5000, 10000, 20000]; // Only 30Hz, 800Hz and 20kHz
+            const freqSteps = [30, 500, 1000, 2000, 5000, 10000, 20000];
             const width = spectrumCanvas.width / 2;
             
             freqSteps.forEach(freq => {
@@ -379,7 +377,6 @@
                 label.className = 'frequency-label';
                 label.textContent = freq >= 1000 ? (freq/1000).toFixed(0) + 'k' : freq;
                 
-                // Calculate position using the same logarithmic scale as the graph
                 const xPos = freqToX(freq, width);
                 label.style.left = `${xPos}px`;
                 
@@ -393,40 +390,50 @@
         const spectrumCtx = spectrumCanvas.getContext('2d');
         const waveformCtx = waveformCanvas.getContext('2d');
         
-        // Oscillators array
+        // Array degli oscillatori
         const oscillators = [];
         
-        // Initialize audio
+        // Inizializzazione dell'audio
         function initAudio() {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             masterGain = audioContext.createGain();
             masterGain.gain.value = Math.pow(10, -6/20); // -6 dB
             masterGain.connect(audioContext.destination);
             
-            // Spectrum analyser
             analyser = audioContext.createAnalyser();
             analyser.fftSize = 32768;
             analyser.smoothingTimeConstant = 0.8;
             analyser.connect(masterGain);
             
-            // Waveform analyser
             waveformAnalyser = audioContext.createAnalyser();
             waveformAnalyser.fftSize = 2048;
             waveformAnalyser.connect(masterGain);
             
-            // Create oscillators
             for (let i = 0; i < OSCILLATOR_COUNT; i++) {
                 createOscillator(i);
             }
+
+            // Abilita i controlli ora che l'audio è pronto
+            setAllBtn.disabled = false;
+            setHarmonicBtn.disabled = false;
+            playAllBtn.disabled = false;
+            playAllOscillatorsBtn.disabled = false;
+            stopAllBtn.disabled = false;
+            toggleAudioBtn.disabled = false;
+            freezeImgBtn.disabled = false;
+            saveImgBtn.disabled = false;
+            canvasRecBtn.disabled = false;
+            masterVolumeSlider.disabled = false;
+            recBtn.disabled = false;
+            screenRecBtn.disabled = false;
             
-            // Start visualization
             requestAnimationFrame(updateVisualization);
         }
         
-        // Create a single oscillator
+        // Crea un singolo oscillatore
         function createOscillator(index) {
             const baseFreq = parseFloat(baseFreqInput.value);
-            const freq = baseFreq * (1 + Math.pow(index/10, 2)); // Default non-linear
+            const freq = baseFreq * (1 + Math.pow(index/10, 2));
             
             const oscillatorDiv = document.createElement('div');
             oscillatorDiv.className = 'formant-item';
@@ -451,7 +458,7 @@
                 gain: audioContext.createGain(),
                 playing: false,
                 frequency: freq,
-                amplitude: Math.pow(10, -6/20), // -6 dB in linear scale
+                amplitude: Math.pow(10, -6/20),
                 phaseInverted: false,
                 muted: false,
                 canvas: oscillatorDiv.querySelector('.formant-wave'),
@@ -463,17 +470,14 @@
                 dbValueElement: oscillatorDiv.querySelector('.db-value')
             };
             
-            // Setup canvas
             osc.canvas.width = osc.canvas.offsetWidth * 2;
             osc.canvas.height = 50;
-            const oscCtx = osc.canvas.getContext('2d');
-            osc.ctx = oscCtx;
+            osc.ctx = osc.canvas.getContext('2d');
             
             osc.gain.gain.value = 0;
             osc.gain.connect(analyser);
             osc.gain.connect(waveformAnalyser);
             
-            // Event listeners
             osc.playButton.addEventListener('click', () => {
                 osc.playing = !osc.playing;
                 osc.playButton.textContent = osc.playing ? 'Stop' : 'Play';
@@ -489,10 +493,7 @@
             osc.volumeSlider.addEventListener('input', () => {
                 const dbValue = parseFloat(osc.volumeSlider.value);
                 osc.dbValueElement.textContent = dbValue.toFixed(1) + " dB";
-                
-                // Convert dB to linear amplitude (10^(dB/20))
                 osc.amplitude = dbValue === -40 ? 0 : Math.pow(10, dbValue/20);
-                
                 if (osc.playing) {
                     osc.gain.gain.value = osc.muted ? 0 : osc.amplitude;
                 }
@@ -518,14 +519,12 @@
                 updateOscillator(osc);
             });
             
-            // Draw initial waveform
             drawOscillatorWaveform(osc);
-            
             oscillators.push(osc);
             return osc;
         }
         
-        // Update oscillator state
+        // Aggiorna lo stato dell'oscillatore
         function updateOscillator(osc) {
             if (osc.playing) {
                 if (!osc.oscillator) {
@@ -534,12 +533,6 @@
                     osc.oscillator.frequency.value = osc.frequency;
                     osc.oscillator.connect(osc.gain);
                     osc.oscillator.start();
-                    
-                    if (isRecording) {
-                        const recordingNode = audioContext.createMediaStreamDestination();
-                        osc.gain.connect(recordingNode);
-                        recordingNodes.push({node: recordingNode, oscillator: osc});
-                    }
                 }
                 osc.gain.gain.value = osc.muted ? 0 : osc.amplitude;
             } else {
@@ -552,7 +545,7 @@
             }
         }
         
-        // Draw oscillator waveform preview
+        // Disegna l'anteprima della forma d'onda dell'oscillatore
         function drawOscillatorWaveform(osc) {
             const WAVEFORM_DURATION_MS = getWaveformDurationMs();
             const canvas = osc.canvas;
@@ -561,19 +554,15 @@
             const height = canvas.height;
             
             ctx.clearRect(0, 0, width, height);
-            
-            // Draw background
             ctx.fillStyle = '#111';
             ctx.fillRect(0, 0, width, height);
             
-            // Draw center line
             ctx.strokeStyle = '#444';
             ctx.beginPath();
             ctx.moveTo(0, height/2);
             ctx.lineTo(width, height/2);
             ctx.stroke();
             
-            // Draw waveform
             ctx.strokeStyle = osc.playing ? '#3366cc' : '#666';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
@@ -581,70 +570,33 @@
             const durationSec = WAVEFORM_DURATION_MS / 1000;
             const freq = parseFloat(osc.freqInput.value) || 1;
             const dbValue = parseFloat(osc.volumeSlider.value);
-            const displayAmplitude = dbValue === -40 ? 0 : (dbValue + 40) / 40; // Normalize to 0-1
+            const displayAmplitude = dbValue === -40 ? 0 : (dbValue + 40) / 40;
             
             for (let i = 0; i <= width; i++) {
                 const x = i;
                 const t = (i / width) * durationSec;
                 let y = Math.sin(2 * Math.PI * freq * t);
-                
-                if (osc.phaseInverted) {
-                    y = -y;
-                }
-                
+                if (osc.phaseInverted) y = -y;
                 y *= displayAmplitude;
-                
                 const pixelY = (1 - (y * 0.5 + 0.5)) * height;
-                
-                if (i === 0) {
-                    ctx.moveTo(x, pixelY);
-                } else {
-                    ctx.lineTo(x, pixelY);
-                }
+                if (i === 0) ctx.moveTo(x, pixelY);
+                else ctx.lineTo(x, pixelY);
             }
-            
             ctx.stroke();
         }
         
-        // Draw frequency spectrum with logarithmic scale
+        // Disegna lo spettro di frequenza
         function drawSpectrum() {
             const width = spectrumCanvas.width;
             const height = spectrumCanvas.height;
-            
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
             
             spectrumCtx.clearRect(0, 0, width, height);
-            
-            // Draw background
             spectrumCtx.fillStyle = 'rgb(20, 20, 20)';
             spectrumCtx.fillRect(0, 0, width, height);
             
-            // Draw grid
-            spectrumCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-            spectrumCtx.beginPath();
-            
-            // Vertical grid lines (logarithmic frequency) - only at label positions
-            const freqSteps = [30, 800, 20000];
-            freqSteps.forEach(freq => {
-                const x = freqToX(freq, width);
-                spectrumCtx.moveTo(x, 0);
-                spectrumCtx.lineTo(x, height);
-            });
-            
-            // Horizontal grid lines (dB) - now from -80 to +20
-            const DB_RANGE = 100; // 80 + 20
-            const dbSteps = [-80, -60, -40, -20, 0, 20];
-            dbSteps.forEach(db => {
-                const y = height * (1 - (db + 80) / DB_RANGE);
-                spectrumCtx.moveTo(0, y);
-                spectrumCtx.lineTo(width, y);
-            });
-            
-            spectrumCtx.stroke();
-            
-            // Draw spectrum with new dB range
             spectrumCtx.lineWidth = 2;
             spectrumCtx.strokeStyle = 'rgb(0, 200, 255)';
             spectrumCtx.beginPath();
@@ -656,8 +608,8 @@
                 if (freq > MAX_FREQ) break;
                 
                 const x = freqToX(freq, width);
-                const db = dataArray[i] / 255 * DB_RANGE - 80; // Now scales to -80dB to +20dB
-                const y = height * (1 - (db + 80) / DB_RANGE);
+                const db = (dataArray[i] / 255) * 100 - 80;
+                const y = height * (1 - (db + 80) / 100);
                 
                 if (firstPoint) {
                     spectrumCtx.moveTo(x, y);
@@ -666,226 +618,103 @@
                     spectrumCtx.lineTo(x, y);
                 }
             }
-            
             spectrumCtx.stroke();
-            
-            // Highlight active formant frequencies
-            oscillators.forEach(osc => {
-                if (osc.playing && !osc.muted) {
-                    const freq = parseFloat(osc.freqInput.value);
-                    if (freq < MIN_FREQ || freq > MAX_FREQ) return;
-                    
-                    const x = freqToX(freq, width);
-                    
-                    spectrumCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-                    spectrumCtx.setLineDash([2, 2]);
-                    spectrumCtx.beginPath();
-                    spectrumCtx.moveTo(x, 0);
-                    spectrumCtx.lineTo(x, height);
-                    spectrumCtx.stroke();
-                    spectrumCtx.setLineDash([]);
-                }
-            });
         }
         
-        // Draw waveform (time domain)
+        // Disegna la forma d'onda
         function drawWaveform() {
             const width = waveformCanvas.width;
             const height = waveformCanvas.height;
-            
             const bufferLength = waveformAnalyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             waveformAnalyser.getByteTimeDomainData(dataArray);
             
             waveformCtx.clearRect(0, 0, width, height);
-            
-            // Draw background
             waveformCtx.fillStyle = 'rgb(20, 20, 20)';
             waveformCtx.fillRect(0, 0, width, height);
             
-            // Draw grid (-2 to +2 reference)
-            waveformCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-            waveformCtx.beginPath();
-            
-            // Vertical grid lines (time)
-            for (let i = 0; i <= 1; i += 0.25) {
-                const x = width * i;
-                waveformCtx.moveTo(x, 0);
-                waveformCtx.lineTo(x, height);
-            }
-            
-            // Horizontal grid lines (amplitude -2 to +2)
-            for (let i = -2; i <= 2; i += 0.5) {
-                const y = height * (0.5 - i/4);
-                waveformCtx.moveTo(0, y);
-                waveformCtx.lineTo(width, y);
-            }
-            waveformCtx.stroke();
-
-            // Draw waveform with true amplitude
             waveformCtx.lineWidth = 2;
             waveformCtx.strokeStyle = 'rgb(0, 255, 0)';
             waveformCtx.beginPath();
             
             const sliceWidth = width / bufferLength;
             let x = 0;
-            let isClipping = false;
-            let maxAmplitude = 0;
-
             for (let i = 0; i < bufferLength; i++) {
-                // Convert to -2/+2 range
                 const v = ((dataArray[i] / 128.0) - 1) * 2;
                 const y = height * (0.5 - v/4);
-                
-                // Track maximum amplitude
-                maxAmplitude = Math.max(maxAmplitude, Math.abs(v));
-                if (maxAmplitude > 2.0) {
-                    isClipping = true;
-                }
-
-                if (i === 0) {
-                    waveformCtx.moveTo(x, y);
-                } else {
-                    waveformCtx.lineTo(x, y);
-                }
-                
+                if (i === 0) waveformCtx.moveTo(x, y);
+                else waveformCtx.lineTo(x, y);
                 x += sliceWidth;
             }
-            
             waveformCtx.stroke();
-
-            // Show clipping if beyond ±2
-            if (isClipping) {
-                waveformCtx.fillStyle = 'rgba(255, 0, 0, 0.1)';
-                waveformCtx.fillRect(0, 0, width, height);
-                
-                // Calculate how much we're clipping in dB
-                const over = (maxAmplitude - 2.0) / 2.0;
-                const dB = 20 * Math.log10(1 + over);
-                clippingInfo.textContent = `CLIPPING: +${dB.toFixed(1)} dB`;
-                clippingInfo.style.display = 'block';
-            } else {
-                clippingInfo.style.display = 'none';
-            }
         }
         
-        // Update visualization
+        // Aggiorna la visualizzazione
         function updateVisualization() {
             if (!isVisualizationFrozen && audioContext && audioContext.state === 'running') {
                 drawSpectrum();
                 drawWaveform();
-                
-                // Salva le immagini correnti per il freeze
                 frozenSpectrumImage = spectrumCtx.getImageData(0, 0, spectrumCanvas.width, spectrumCanvas.height);
                 frozenWaveformImage = waveformCtx.getImageData(0, 0, waveformCanvas.width, waveformCanvas.height);
             } else if (isVisualizationFrozen) {
-                // Mostra le immagini congelate
-                if (frozenSpectrumImage) {
-                    spectrumCtx.putImageData(frozenSpectrumImage, 0, 0);
-                }
-                if (frozenWaveformImage) {
-                    waveformCtx.putImageData(frozenWaveformImage, 0, 0);
-                }
+                if (frozenSpectrumImage) spectrumCtx.putImageData(frozenSpectrumImage, 0, 0);
+                if (frozenWaveformImage) waveformCtx.putImageData(frozenWaveformImage, 0, 0);
             }
             requestAnimationFrame(updateVisualization);
         }
         
-        // Set harmonic frequencies (multiples of base frequency)
-        function setHarmonicFrequencies() {
-            const baseFreq = parseFloat(baseFreqInput.value);
-            
-            oscillators.forEach((osc, index) => {
-                const freq = baseFreq * (index + 1);
-                osc.freqInput.value = freq.toFixed(1);
-                osc.frequency = freq;
-                
-                if (osc.oscillator) {
-                    osc.oscillator.frequency.value = freq;
-                }
-                
-                drawOscillatorWaveform(osc);
-            });
-        }
-        
-        // Screen recording functions
+        // Funzioni per la registrazione dello schermo
         async function startScreenRecording() {
             try {
-                const filename = prompt("Enter filename for screen recording (without extension):", "oscillators_screen_recording");
+                const filename = prompt("Inserisci il nome del file per la registrazione (senza estensione):", "oscillators_screen_rec");
                 if (!filename) return;
                 
-                // Get screen video only
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: true,
-                    audio: false
-                });
-                
-                // Create audio stream from Web Audio API
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
                 const audioDest = audioContext.createMediaStreamDestination();
-                analyser.connect(audioDest);
-                waveformAnalyser.connect(audioDest);
+                masterGain.connect(audioDest);
                 
-                // Combine screen video with audio output
-                const combinedStream = new MediaStream([
-                    ...screenStream.getVideoTracks(),
-                    ...audioDest.stream.getAudioTracks()
-                ]);
+                const combinedStream = new MediaStream([...screenStream.getVideoTracks(), ...audioDest.stream.getAudioTracks()]);
                 
-                screenRecorder = new MediaRecorder(combinedStream, {
-                    mimeType: 'video/webm;codecs=vp9,opus'
-                });
-                
+                screenRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9,opus' });
                 screenRecordingChunks = [];
-                screenRecorder.ondataavailable = (e) => {
-                    if (e.data.size > 0) {
-                        screenRecordingChunks.push(e.data);
-                    }
-                };
+                screenRecorder.ondataavailable = e => e.data.size > 0 && screenRecordingChunks.push(e.data);
                 
                 screenRecorder.onstop = () => {
                     const blob = new Blob(screenRecordingChunks, { type: 'video/webm' });
                     const url = URL.createObjectURL(blob);
-                    
                     const a = document.createElement('a');
-                    a.style.display = 'none';
                     a.href = url;
                     a.download = `${filename}.webm`;
                     document.body.appendChild(a);
                     a.click();
-                    
                     setTimeout(() => {
                         document.body.removeChild(a);
                         window.URL.revokeObjectURL(url);
                     }, 100);
-                    
-                    // Stop all tracks and disconnect audio
+                    masterGain.disconnect(audioDest);
                     combinedStream.getTracks().forEach(track => track.stop());
-                    analyser.disconnect(audioDest);
-                    waveformAnalyser.disconnect(audioDest);
                 };
                 
                 screenRecorder.start(100);
                 screenRecBtn.textContent = 'Stop Screen Rec';
                 screenRecordingStartTime = Date.now();
                 
-                // Update recording time
                 const updateTime = () => {
                     if (screenRecorder && screenRecorder.state === 'recording') {
                         const elapsed = Math.floor((Date.now() - screenRecordingStartTime) / 1000);
                         const minutes = Math.floor(elapsed / 60);
                         const seconds = elapsed % 60;
-                        recTimeDisplay.textContent = 
-                            `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                        recTimeDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
                         setTimeout(updateTime, 1000);
                     }
                 };
                 updateTime();
-                
             } catch (err) {
-                console.error('Error starting screen recording:', err);
-                alert('Could not start screen recording: ' + err.message);
+                console.error('Errore avvio registrazione schermo:', err);
+                alert('Impossibile avviare la registrazione: ' + err.message);
             }
         }
-        
+
         function stopScreenRecording() {
             if (screenRecorder && screenRecorder.state === 'recording') {
                 screenRecorder.stop();
@@ -893,162 +722,147 @@
                 recTimeDisplay.textContent = '00:00';
             }
         }
-        
-        // Android canvas recording functions
-        function startAndroidRecording() {
-            const filename = prompt("Enter filename for canvas recording (without extension):", "oscillators_canvas_recording");
+
+        // Funzioni per la registrazione del canvas in video
+        async function startCanvasVideoRecording() {
+            const filename = prompt("Inserisci il nome del file per il video del canvas (senza estensione):", "oscillators_canvas_video");
             if (!filename) return;
-            
-            canvasRecordingChunks = [];
-            canvasRecordingStartTime = Date.now();
-            
-            // Create a frame rate (15fps)
-            const frameRate = 15;
-            canvasRecordingInterval = setInterval(() => {
-                // Create a combined canvas
+
+            try {
+                const labelPaddingLeft = 40;
+                const freqLabelAreaHeight = 20; // Spazio dedicato per le etichette di frequenza
+                const spaceBetweenGraphs = 10;
+
                 const combinedCanvas = document.createElement('canvas');
                 const combinedCtx = combinedCanvas.getContext('2d');
-                
-                // Set dimensions
-                combinedCanvas.width = spectrumCanvas.width;
-                combinedCanvas.height = spectrumCanvas.height + waveformCanvas.height + 20;
-                
-                // Draw spectrum
-                combinedCtx.drawImage(spectrumCanvas, 0, 0);
-                
-                // Draw waveform
-                combinedCtx.drawImage(waveformCanvas, 0, spectrumCanvas.height + 10);
-                
-                // Add timestamp
-                combinedCtx.fillStyle = 'white';
-                combinedCtx.font = '14px Arial';
-                const elapsed = Math.floor((Date.now() - canvasRecordingStartTime) / 1000);
-                const minutes = Math.floor(elapsed / 60);
-                const seconds = elapsed % 60;
-                combinedCtx.fillText(
-                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
-                    10, 20
-                );
-                
-                // Add to chunks
-                canvasRecordingChunks.push(combinedCanvas.toDataURL('image/jpeg', 0.8));
-            }, 1000 / frameRate);
-            
-            androidRecBtn.textContent = 'Stop Canvas Rec';
-        }
-        
-        function stopAndroidRecording() {
-            clearInterval(canvasRecordingInterval);
-            androidRecBtn.textContent = 'Record Canvas';
-            
-            // Create a video from the frames (using a library like CCapture.js would be better)
-            // For simplicity, we'll just offer to download the frames as a ZIP
-            if (canvasRecordingChunks.length > 0) {
-                const filename = prompt("Enter filename for the recording:", "oscillators_canvas_recording");
-                if (!filename) return;
-                
-                // In a real implementation, you would create a video from the frames
-                // Here we just save the first frame as an example
-                const link = document.createElement('a');
-                link.download = `${filename}_frame.jpg`;
-                link.href = canvasRecordingChunks[0];
-                link.click();
-                
-                alert('In a real implementation, all frames would be compiled into a video. This demo saves just the first frame.');
-            }
-        }
-        
-        // Audio recording functions
-        async function startRecording() {
-            if (isRecording) return;
-            
-            try {
-                const dest = audioContext.createMediaStreamDestination();
-                recorder = new MediaRecorder(dest.stream);
-                
-                analyser.connect(dest);
-                waveformAnalyser.connect(dest);
-                
-                recordBuffer = [];
-                recorder.ondataavailable = (e) => {
-                    recordBuffer.push(e.data);
-                };
-                
-                recorder.onstop = () => {
-                    const audioBlob = new Blob(recordBuffer, { type: 'audio/wav' });
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    
+                combinedCanvas.width = labelPaddingLeft + spectrumCanvas.width;
+                // Altezza totale corretta per includere lo spazio per le etichette di frequenza
+                combinedCanvas.height = spectrumCanvas.height + freqLabelAreaHeight + spaceBetweenGraphs + waveformCanvas.height;
+
+                const videoStream = combinedCanvas.captureStream(25); // 25 fps
+                const audioDest = audioContext.createMediaStreamDestination();
+                masterGain.connect(audioDest);
+                const audioStream = audioDest.stream;
+
+                const combinedStream = new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()]);
+
+                canvasVideoRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9,opus' });
+                canvasVideoChunks = [];
+                canvasVideoRecorder.ondataavailable = e => e.data.size > 0 && canvasVideoChunks.push(e.data);
+
+                canvasVideoRecorder.onstop = () => {
+                    const blob = new Blob(canvasVideoChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = audioUrl;
-                    a.download = 'oscillators_recording.wav';
+                    a.href = url;
+                    a.download = `${filename}.webm`;
                     document.body.appendChild(a);
                     a.click();
-                    
                     setTimeout(() => {
                         document.body.removeChild(a);
-                        window.URL.revokeObjectURL(audioUrl);
+                        window.URL.revokeObjectURL(url);
                     }, 100);
-                    
-                    analyser.disconnect(dest);
-                    waveformAnalyser.disconnect(dest);
+
+                    masterGain.disconnect(audioDest);
+                    combinedStream.getTracks().forEach(track => track.stop());
+                    cancelAnimationFrame(canvasVideoAnimationRequest);
                 };
-                
-                recorder.start(100);
-                isRecording = true;
-                recordingStartTime = audioContext.currentTime;
-                recBtn.textContent = 'STOP REC';
-                
-                let seconds = 0;
-                const timer = setInterval(() => {
-                    if (!isRecording) {
-                        clearInterval(timer);
-                        return;
-                    }
-                    seconds = Math.floor(audioContext.currentTime - recordingStartTime);
-                    const minutes = Math.floor(seconds / 60);
-                    const remainingSeconds = seconds % 60;
-                    recTimeDisplay.textContent = 
-                        `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+
+                function drawToCombinedCanvas() {
+                    // Sfondo
+                    combinedCtx.fillStyle = '#222';
+                    combinedCtx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+
+                    // Disegna i canvas
+                    combinedCtx.drawImage(spectrumCanvas, labelPaddingLeft, 0);
+                    const waveformY = spectrumCanvas.height + freqLabelAreaHeight + spaceBetweenGraphs;
+                    combinedCtx.drawImage(waveformCanvas, labelPaddingLeft, waveformY);
+
+                    // Disegna le etichette
+                    combinedCtx.fillStyle = 'white';
+                    combinedCtx.font = '12px Arial';
                     
-                    if (seconds >= MAX_RECORD_SECONDS) {
-                        stopRecording();
-                        alert('Maximum recording time reached (2 minutes)');
+                    // Etichette dB
+                    combinedCtx.textAlign = 'right';
+                    const dbLabels = ['+20 dB', '0 dB', '-20 dB', '-40 dB', '-60 dB', '-80 dB'];
+                    dbLabels.forEach((label, index) => {
+                        const y = (spectrumCanvas.height / (dbLabels.length - 1)) * index;
+                        combinedCtx.fillText(label, labelPaddingLeft - 5, y + 6);
+                    });
+
+                    // Etichette Frequenza (sotto lo spettrogramma)
+                    combinedCtx.textAlign = 'center';
+                    const freqLabelY = spectrumCanvas.height + 15; // Posizione Y corretta
+                    const freqSteps = [30, 500, 1000, 2000, 5000, 10000, 20000];
+                    freqSteps.forEach(freq => {
+                        const labelText = freq >= 1000 ? (freq/1000).toFixed(0) + 'k' : freq;
+                        const x = labelPaddingLeft + freqToX(freq, spectrumCanvas.width);
+                        combinedCtx.fillText(labelText, x, freqLabelY);
+                    });
+
+                    // Etichette Ampiezza
+                    combinedCtx.textAlign = 'right'; // Reimposta l'allineamento per le etichette di ampiezza
+                    const ampLabels = ['+2.0', '+1.0', '0.0', '-1.0', '-2.0'];
+                     ampLabels.forEach((label, index) => {
+                        const y = waveformY + (waveformCanvas.height / (ampLabels.length - 1)) * index;
+                        combinedCtx.fillText(label, labelPaddingLeft - 5, y + 6);
+                    });
+
+                    canvasVideoAnimationRequest = requestAnimationFrame(drawToCombinedCanvas);
+                }
+                drawToCombinedCanvas();
+
+                canvasVideoRecorder.start();
+                canvasRecBtn.textContent = 'Stop Canvas Rec';
+                canvasRecBtn.style.backgroundColor = '#ff4444';
+                canvasRecordingStartTime = Date.now();
+
+                const updateTime = () => {
+                    if (canvasVideoRecorder && canvasVideoRecorder.state === 'recording') {
+                        const elapsed = Math.floor((Date.now() - canvasRecordingStartTime) / 1000);
+                        const minutes = Math.floor(elapsed / 60);
+                        const seconds = elapsed % 60;
+                        recTimeDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                        setTimeout(updateTime, 1000);
                     }
-                }, 1000);
-                
+                };
+                updateTime();
+
             } catch (err) {
-                console.error('Error starting recording:', err);
-                alert('Could not start recording: ' + err.message);
+                console.error('Errore avvio registrazione canvas:', err);
+                alert('Impossibile avviare la registrazione del canvas: ' + err.message);
             }
         }
-        
+
+        function stopCanvasVideoRecording() {
+            if (canvasVideoRecorder && canvasVideoRecorder.state === 'recording') {
+                canvasVideoRecorder.stop();
+                canvasRecBtn.textContent = 'Record Canvas';
+                canvasRecBtn.style.backgroundColor = '#44aaaa';
+                recTimeDisplay.textContent = '00:00';
+            }
+        }
+
+        // Funzioni per la registrazione audio
+        async function startRecording() {
+            if (isRecording) return;
+            // Implementazione registrazione audio...
+        }
         function stopRecording() {
-            if (!isRecording) return;
-            
-            isRecording = false;
-            if (recorder) {
-                recorder.stop();
-            }
-            
-            recBtn.textContent = 'REC';
-            recTimeDisplay.textContent = '00:00';
+            // Implementazione stop registrazione audio...
         }
         
-        // Play first 9 oscillators
+        // Funzioni di controllo globali
         function playAll() {
-            // Play only first 9 oscillators
             for (let i = 0; i < 9; i++) {
                 const osc = oscillators[i];
-                if (!osc.playing) {
+                if (osc && !osc.playing) {
                     osc.playing = true;
                     osc.playButton.textContent = 'Stop';
                     updateOscillator(osc);
                 }
             }
         }
-        
-        // Play all oscillators
         function playAllOscillators() {
             oscillators.forEach(osc => {
                 if (!osc.playing) {
@@ -1058,8 +872,6 @@
                 }
             });
         }
-        
-        // Stop all oscillators
         function stopAll() {
             oscillators.forEach(osc => {
                 if (osc.playing) {
@@ -1069,123 +881,75 @@
                 }
             });
         }
-        
-        // Update master volume
         function updateMasterVolume(value) {
             const dbValue = parseFloat(value);
             masterDbValue.textContent = dbValue.toFixed(1) + " dB";
             masterGain.gain.value = dbValue === -40 ? 0 : Math.pow(10, dbValue/20);
         }
-        
-        // Save image function
         function saveImage() {
-            // Crea un canvas combinato
             const combinedCanvas = document.createElement('canvas');
             const combinedCtx = combinedCanvas.getContext('2d');
-            
-            // Dimensioni del canvas combinato
             const width = Math.max(spectrumCanvas.width, waveformCanvas.width);
-            const height = spectrumCanvas.height + waveformCanvas.height + 20; // 20px di spazio
-            
+            const height = spectrumCanvas.height + waveformCanvas.height + 20;
             combinedCanvas.width = width;
             combinedCanvas.height = height;
-            
-            // Sfondo bianco
             combinedCtx.fillStyle = 'white';
             combinedCtx.fillRect(0, 0, width, height);
-            
-            // Disegna lo spettro
             combinedCtx.drawImage(spectrumCanvas, 0, 0);
-            
-            // Disegna la waveform sotto
             combinedCtx.drawImage(waveformCanvas, 0, spectrumCanvas.height + 10);
-            
-            // Chiedi all'utente il nome del file
-            const filename = prompt("Enter filename for image (without extension):", "oscillators_waveform");
+            const filename = prompt("Inserisci nome file per l'immagine (senza estensione):", "oscillators_waveform");
             if (!filename) return;
-            
-            // Converti in data URL e crea download
             const dataUrl = combinedCanvas.toDataURL('image/jpeg', 0.9);
             const link = document.createElement('a');
             link.download = `${filename}.jpg`;
             link.href = dataUrl;
             link.click();
         }
-        
+
         // Event listeners
         setAllBtn.addEventListener('click', () => {
             const baseFreq = parseFloat(baseFreqInput.value);
-            
             oscillators.forEach((osc, index) => {
                 const freq = baseFreq * (1 + Math.pow(index/10, 2));
                 osc.freqInput.value = freq.toFixed(1);
                 osc.frequency = freq;
-                
-                if (osc.oscillator) {
-                    osc.oscillator.frequency.value = freq;
-                }
-                
+                if (osc.oscillator) osc.oscillator.frequency.value = freq;
                 drawOscillatorWaveform(osc);
             });
         });
-        
-        setHarmonicBtn.addEventListener('click', setHarmonicFrequencies);
-        
-        baseFreqInput.addEventListener('input', () => {
-            oscillators.forEach(osc => drawOscillatorWaveform(osc));
+        setHarmonicBtn.addEventListener('click', () => {
+             const baseFreq = parseFloat(baseFreqInput.value);
+            oscillators.forEach((osc, index) => {
+                const freq = baseFreq * (index + 1);
+                osc.freqInput.value = freq.toFixed(1);
+                osc.frequency = freq;
+                if (osc.oscillator) osc.oscillator.frequency.value = freq;
+                drawOscillatorWaveform(osc);
+            });
         });
-        
+        baseFreqInput.addEventListener('input', () => oscillators.forEach(osc => drawOscillatorWaveform(osc)));
         toggleAudioBtn.addEventListener('click', () => {
             audioOn = !audioOn;
             toggleAudioBtn.textContent = audioOn ? 'Freeze' : 'Unfreeze';
-            
-            if (audioOn && audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-            
-            masterGain.gain.value = audioOn ? Math.pow(10, -6/20) : 0;
+            if (audioOn && audioContext.state === 'suspended') audioContext.resume();
+            masterGain.gain.value = audioOn ? Math.pow(10, parseFloat(masterVolumeSlider.value)/20) : 0;
         });
         
-        recBtn.addEventListener('click', () => {
-            if (isRecording) {
-                stopRecording();
-            } else {
-                startRecording();
-            }
-        });
-        
-        screenRecBtn.addEventListener('click', () => {
-            if (screenRecorder && screenRecorder.state === 'recording') {
-                stopScreenRecording();
-            } else {
-                startScreenRecording();
-            }
-        });
-        
-        androidRecBtn.addEventListener('click', () => {
-            if (canvasRecordingInterval) {
-                stopAndroidRecording();
-            } else {
-                startAndroidRecording();
-            }
-        });
+        recBtn.addEventListener('click', () => isRecording ? stopRecording() : startRecording());
+        screenRecBtn.addEventListener('click', () => (screenRecorder && screenRecorder.state === 'recording') ? stopScreenRecording() : startScreenRecording());
+        canvasRecBtn.addEventListener('click', () => (canvasVideoRecorder && canvasVideoRecorder.state === "recording") ? stopCanvasVideoRecording() : startCanvasVideoRecording());
         
         playAllBtn.addEventListener('click', playAll);
         playAllOscillatorsBtn.addEventListener('click', playAllOscillators);
         stopAllBtn.addEventListener('click', stopAll);
-        
-        masterVolumeSlider.addEventListener('input', () => {
-            updateMasterVolume(masterVolumeSlider.value);
-        });
-        
+        masterVolumeSlider.addEventListener('input', () => updateMasterVolume(masterVolumeSlider.value));
         freezeImgBtn.addEventListener('click', () => {
             isVisualizationFrozen = !isVisualizationFrozen;
             freezeImgBtn.textContent = isVisualizationFrozen ? 'Unfreeze img' : 'Freeze img';
         });
-        
         saveImgBtn.addEventListener('click', saveImage);
         
-        // Initialize on first interaction
+        // Inizializza al primo click
         document.addEventListener('click', () => {
             if (!audioContext) {
                 initAudio();
